@@ -31,6 +31,32 @@
 不放宽相对路径守卫，也不通过跨根软链接绕过它。旧 13.2/8.3 不作为本次默认值。
 不同 target prefix 与 ABI 不可静默替代。
 
+## 集中浏览入口
+
+server 的本目录以同名软链接索引三套已验证的 `/opt` 安装，不复制工具链实体：
+
+```text
+arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi -> /opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-linux-gnu -> /opt/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-linux-gnu
+arm-gnu-toolchain-14.2.rel1-x86_64-aarch64-none-elf -> /opt/arm-gnu-toolchain-14.2.rel1-x86_64-aarch64-none-elf
+```
+
+这些链接只用于 server 端浏览和管理，不改变 profile 或清单中的 `/opt` 绝对路径。
+链接及其指向的实体不进入 Windows 部署源或公开 Git。
+换机器时先确认实际安装目录，再在 server 创建所需链接，例如：
+
+```bash
+ln -s /opt/<toolchain-directory> <server-resource-root>/toolchain/<toolchain-directory>
+```
+
+已有同名文件或链接时先核对，不强制覆盖。创建后用 `readlink -f` 检查目标，
+再通过链接调用对应 gcc 的 `-dumpmachine` 和 `-dumpfullversion` 核对身份；
+这些检查不启动实际编译。
+
+当前 Windows SMB 共享未显示这些指向共享根之外 `/opt` 的链接；
+通过 SSH 使用它们，不把共享中的不可见误判为 server 未安装工具链。
+若需要从资源管理器直接浏览，需另行确认共享策略，不为此自动放宽 Samba 配置。
+
 ## 当前长期边界
 
 - `U-Boot`

@@ -20,6 +20,7 @@
 *.lnk
 __pycache__/
 *.pyc
+*.[pP][dD][fF].index/
 
 /support_level/SoC_material/**
 !/support_level/SoC_material/README.md

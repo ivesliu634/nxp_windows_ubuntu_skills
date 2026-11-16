@@ -23,3 +23,7 @@ RM 依芯片归档；原理图依板型、封装、DDR、板卡 revision 归档�
 原理图页码要区分 PDF 页序和图纸自己的 sheet 编号。只在找到真实文件后登记。
 
 检索路线：文件名和板型 → PDF 目录/关键词 → 对应 sheet 上网络名、器件位号、连接器针脚。软件 pinmux 与设备树再到 server 对照。
+
+RM 的本地目录定位、范围搜索和摘录入口见 [Windows imx-rm](../tools/imx-rm/USAGE.md)。
+先明确 PDF 版本并定位章节，再读取有界页面；原理图和复杂图表仍回原 PDF。
+工具自动生成的 `*.pdf.index/` 是私有缓存，不进入公开 Git。

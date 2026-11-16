@@ -33,6 +33,8 @@ server 资源根，保留这一级目录结构：
    客户包校验器 `--help`。这些检查不启动实际构建。
 5. `/opt` 编译器路径是当前配置值，不随文件部署安装。换机器时核对实际编译器，
    同步修改对应 profile 与 checklist，缺项明确报告，不靠软链接绕过路径守卫。
+   server 的 `toolchain` 可按其 [README](support_level/toolchain/README.md) 创建同名浏览链接；
+   链接在 server 创建，不纳入部署源，也不改变构建配置。
 
 客户包校验脚本沿用 Windows
 [build-customer-release](../workspace/.agents/skills/build-customer-release/SKILL.md)

@@ -32,7 +32,8 @@ server 不保留本工作流的 `.git`、`.github`、`workspace`、skills 或 AI
 
 `board_knowledge`、`Image`、`SoC_material`、`linux_document` 和 `to_absorb` 只在 Windows，
 BCU、串口、UUU 也只在 Windows。原 Ubuntu 历史板级资料已归并到 Windows 板卡资料索引，
-不因清理重复目录而丢弃。server 不部署只有说明的 `imx-rm` 或当前无调用的 `task-tool`。
+不因清理重复目录而丢弃。`imx-rm` 只在 Windows 查询本地 PDF，
+不部署到 server；server 也不部署当前无调用的 `task-tool`。
 需要镜像时在 server case 生成并按需取回，不另建 Windows 专属的长期镜像资料目录。
 
 已准备的正式源码与依赖以 server setup case 的 `records/source-inventory.json`

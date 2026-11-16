@@ -99,11 +99,12 @@ Windows 实际镜像根见 ENVIRONMENT；本地 `Image` 是索引，不能当成
 具体 SoC、板型和版本以 Windows 实际目录为准，不沿用原 Ubuntu 电脑的安装清单。
 如果问题落在“查芯片资料、查 RM、查板级硬件资料”，先从这里找。
 
-对 `i.MX` RM 内容类问题，若 Windows 已部署 `imx-rm`，先按其 `USAGE.md`
-用 `lookup` / `workset` 定位章节，再用 `extract` 抽取证据。
-当前参考仓库只提供该工具的说明，没有程序入口，本机未部署 Windows 版本；
-明确此限制后从 Windows 原始 PDF 查询，不调用不存在的 Linux 程序。
-原始 PDF 仍是权威来源。
+对 `i.MX` RM 内容类问题，先按 Windows
+[imx-rm USAGE](../../../../support_level/tools/imx-rm/USAGE.md)
+用 `list` 确认 PDF，`toc` / `lookup` 定位候选章节，再用 `extract` 抽取有界证据。
+需要原文关键词时，用 `search` 显式指定章节或 PDF 页范围，不默认扫描整本手册。
+本实现不提供上游完整的 `workset`，不调用不存在的 Linux 程序。
+引用时保留 PDF 路径、SHA-256、章节及 1-based PDF 页序；原始 PDF 仍是权威来源。
 
 只有下面情况才直接回到原始 PDF：
 
@@ -128,7 +129,7 @@ Windows 已保留的工具包括：
 
 server 单独部署 `compile-tool`、项目清单和 policy，位置见 Windows ENVIRONMENT，
 不需要在 server clone 整套工作流或同步 skills。
-`imx-rm` 当前仍只有参考说明，没有部署 Windows 程序。
+`imx-rm` 在 Windows 运行；PDF 及其索引/摘录缓存不上传 server 或公开 Git。
 
 也就是说，如果任务是在找板控工具、烧写工具或本地辅助小工具，先看这里。
 
@@ -291,8 +292,11 @@ release 包分类说明包括以下两类，但不表示对应压缩包已经取
 - `imx943`
 - `imx95`
 
-这是分类约定，不是当前 blob 清单。当前只定位到历史 SCFW 候选，
-不能据此宣称 i.MX943/i.MX95 的 DDR/ELE/AHAB 输入已准备好。
+这是分类约定，不是当前 blob 清单。server 已保存当前 LF 配套的
+`firmware-imx 8.33` 和 `firmware-ele-imx 2.0.7` 官方原始包，来源、SHA-256 和状态见
+[firmware 说明](../../../../server/support_level/firmware/README.md)。
+原始包尚未解包或核对具体 SoC/rev；不能据此宣称 DDR/ELE/AHAB 输入已准备好，
+也不能静默替代旧固定资产矩阵中的版本和哈希。
 
 如果问题是在找 DDR firmware、ELE / AHAB 或其他固定 blob，先看这里。
 
