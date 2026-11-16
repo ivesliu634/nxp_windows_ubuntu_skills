@@ -1,0 +1,329 @@
+---
+name: support
+description: 支撑层资源入口。用于回答当前 `support_level/` 里有什么、各目录分别负责什么、资源在什么位置，以及下一步应该进入哪个目录说明、README、USAGE 或下层 skill。当需要找镜像、资料、工具、源码、SDK、toolchain、firmware 或当前 case 目录时，先查这里。
+---
+
+# 支撑层
+
+Windows 支撑层为 `workspace` 同级的 `../support_level`；Ubuntu 支撑层及实际路径见
+工作区根 `ENVIRONMENT.md`。访问 server 先读 `myserver` skill。
+业务源码 Git 仓库、SDK、工具链与构建现场只在 server，Windows 不留业务源码副本。
+本工作流的 Git 仓库和 skills 在 Windows 维护；server 不承载 AI 工作区。
+Windows 资料包根的 `server/support_level` 仅保存远端工具、规则和说明的部署源，
+不是已下载的业务源码或可在 Windows 执行的构建环境。部署见
+[server/README.md](../../../../server/README.md)。
+
+## 两端位置适配
+
+- Windows：`SoC_material`、`linux_document`、`Image`、`board_knowledge`、板级工具和完整 case。
+- server：`code_assets`、`release_packages`、`software_stacks`、`compile_targets`、
+  `toolchain`、`firmware`、构建工具及同名 case 执行目录。
+- 本地 `code_assets` 只保存模块说明，不是源码。server 的项目规则和干净基线位于
+  `code_assets`，历史任务副本另在 ENVIRONMENT 登记的位置，不擅自移动。
+- 本地 case 主目录是 `..\support_level\work\<case>`（相对于 workspace）。先复用上下文，
+  再按需将构建输入送到 server、把构建记录和所需产物取回。
+- 下文资产列表保留参考仓库的分类示例，不表示当前机器已安装这些对象；
+  先读资料包根的 `support_level/README.md` 和 ENVIRONMENT，缺项明确报告。
+
+这层主要负责：
+
+- 当前支撑层里都有什么
+- 这些资源分别负责什么
+- 它们放在什么位置
+
+这层不负责直接展开：
+
+- 编译步骤
+- 板级操作手册
+- 具体主机现状
+- 某个源码项目的操作手册
+
+## 使用方式
+
+1. 先在这层判断当前问题落在哪类资源
+2. 再进入对应目录的 README 或工具/项目 `USAGE.md`
+3. 如果问题已经从“找资源”变成“做编译”或“做板级动作”，切到 `compile` 或 `board-exec`
+
+如果对应目录已经有 `RELATION.yaml` 或 `<id>.RELATION.yaml`，
+先读它做快速索引：
+
+- 确认这个对象的 owner
+- 看它指向哪些 compile target、project、software stack、release package、board、tool
+- 看哪些动作必须进入 case
+- 看有哪些稳定 warning
+
+`RELATION.yaml` 不替代 README / USAGE。
+涉及具体解释、操作步骤、版本细节或例外情况时，仍回到对应人读文档。
+工具和板级知识如果已有 `RELATION.yaml`，
+也只用它确认 owner 和下沉路径；
+真正改变板状态的动作仍切到 `board-exec`。
+
+如果问题已经进入真实 case，
+`support` 还负责先把 case 容器和已有上下文说清楚，
+但不负责代替后续 owner 做状态判断。
+
+也就是说，`support` 在这套机制里只负责：
+
+- 建立或复用当前 case
+- 告诉后续 owner 当前 case 在哪
+- 指出当前 case 下是否已经有 `README.md`、`logs/`、`artifacts/`、`state/`
+- 说明哪些已有内容可被后续阶段直接复用
+
+`support` 不负责：
+
+- 代替 `compile` 生成 `handoff`
+- 代替 `board-exec` 写 `ledger`
+- 判断当前板级动态事实
+
+## 当前目录
+
+### `Image/`
+
+放预下载镜像、发布包、可直接复用的烧写输入。
+这里更像“现成镜像资产层”，适合先回答：
+
+- 当前本地有没有某块板可直接用的镜像包
+- 这次拿来烧写或对比的镜像基线在哪
+
+Windows 实际镜像根见 ENVIRONMENT；本地 `Image` 是索引，不能当成 server 镜像库。
+
+### `SoC_material/`
+
+放各 SoC 的资料，例如：
+
+- 原理图
+- 硬件设计资料
+- RM
+
+这一层按 SoC 分目录。
+具体 SoC、板型和版本以 Windows 实际目录为准，不沿用原 Ubuntu 电脑的安装清单。
+如果问题落在“查芯片资料、查 RM、查板级硬件资料”，先从这里找。
+
+对 `i.MX` RM 内容类问题，若 Windows 已部署 `imx-rm`，先按其 `USAGE.md`
+用 `lookup` / `workset` 定位章节，再用 `extract` 抽取证据。
+当前参考仓库只提供该工具的说明，没有程序入口，本机未部署 Windows 版本；
+明确此限制后从 Windows 原始 PDF 查询，不调用不存在的 Linux 程序。
+原始 PDF 仍是权威来源。
+
+只有下面情况才直接回到原始 PDF：
+
+- `imx-rm` 找不到对应 RM
+- 索引构建或章节抽取失败
+- 工具结果明显缺章节或误路由
+- 问题需要确认 PDF 版面、图、复杂表格
+- 用户明确要求直接查原始 PDF
+
+### `tools/`
+
+放当前长期保留的主机侧工具。
+目录层 `README.md` 负责说明这层里有什么、各工具放在哪。
+具体工具目录里的 `USAGE.md` 负责操作手册。
+
+Windows 已保留的工具包括：
+
+- `uuu`
+- `bcu`
+- `serial-console`
+- `cfimager`
+
+server 单独部署 `compile-tool`、项目清单和 policy，位置见 Windows ENVIRONMENT，
+不需要在 server clone 整套工作流或同步 skills。
+`imx-rm` 当前仍只有参考说明，没有部署 Windows 程序。
+
+也就是说，如果任务是在找板控工具、烧写工具或本地辅助小工具，先看这里。
+
+### `board_knowledge/`
+
+放已经被实测证明、后续可复用的板级操作知识。
+目录层 `README.md` 负责说明板级知识怎么分布；
+具体板目录里的 `README.md` 负责该板的事实、基线和风险。
+
+Windows 当前板级索引包括：
+
+- `imx93.md`
+- `imx943-b1.md`
+- `imx95.md`
+
+原 Ubuntu 的其他板型资料已归并到 Windows `board_knowledge`，从其 README 的历史参考区进入。
+历史目录中的 RELATION 只记录原环境关系，不表示当前连接了这些实物或已验证 Windows 操作；
+server 不再保存板级知识、板控/串口工具、RM/镜像资料目录或 `to_absorb` 副本。
+
+如果问题是在判断某块板的默认串口、默认下载态、已知风险、板 revision 差异，就进这里。
+
+### `linux_document/`
+
+放 Linux BSP 官方文档，如 release note、User's Guide、构建文档。
+它更偏资料层，不是源码层，也不是板级操作层。
+
+### `code_assets/`
+
+放长期保留、可按任务需要切换 ref 的代码资产。
+这一层先分清两件事：
+
+- 当前看的到底是单个 Git 源码项目或 manifest
+- 还是只有整体协同才有意义的工作区
+
+#### `code_assets/projects/`
+
+放单项目 Git 源码资产和 manifest 资产。
+这一层先回答：
+
+- 有哪些 Git 源码项目或 manifest
+- 在什么位置
+- 能不能把它当成可切换源码基线或 manifest 基线来读
+
+server 资源目录保留的项目说明与规则，简要包括以下项目；
+这些说明目录不等于源码已经 checkout。实际源码候选见 ENVIRONMENT，使用前再核对版本和改动：
+
+- `imx-atf`
+- `imx-mkimage`
+- `imx-oei`
+- `imx-optee-os`
+- `imx-sm`
+- `linux-imx`
+- `mcuxsdk-core`
+- `mcuxsdk-manifests`
+- `meta-real-time-edge`
+- `real-time-edge-linux`
+- `real-time-edge-uboot`
+- `uboot-imx`
+- `android`
+
+目录层 `README.md` 负责说明这一层有哪些项目、项目放在哪里。
+每个项目旁边的 `USAGE.md` 或 `README.md` 负责该项目自己的操作手册或说明文档。
+
+这里默认只读：
+
+- 可以浏览
+- 可以对比
+- 可以按任务需要做可逆的 checkout / tag / branch 切换
+- 不在这里直接做 case 构建
+
+不可通过 Git 切版本的厂商 release 包不在这里，
+应进入 `release_packages/`。
+
+#### `code_assets/workspaces/`
+
+放整体协同才有意义的工作区输入。
+这一层先回答：
+
+- 本地有哪些工作区
+- 它们各自承担什么角色
+- 哪些只是联动输入，不能自动等于“从这里编”
+
+原仓库保留的集成工作区说明包括：
+
+- `zephyr-workspace`
+- `hmc-workspace`
+
+如果任务只是查代码资产，优先留在 `code_assets/`；
+如果任务已经变成“我要编什么”，切到 `compile`。
+
+### `software_stacks/`
+
+放跨项目的软件栈身份说明。
+如果用户说的是 `RTE 3.3`、`RTE 3.4`、`Real-Time Edge`
+这类软件栈或软件线，
+先看这里确认它对 LF 家族、源码 ref、release 包和 `flash.bin` 内容的影响。
+
+server 资源目录保留的软件栈说明：
+
+- `rte.md`
+
+### `release_packages/`
+
+放不可通过 Git checkout 切版本的厂商 release 包资产。
+这一层关心的是：
+
+- 当前本地有哪些 release 包
+- 各自对应哪些板型 / 版本
+- 如果缺目标版本，应让用户提供或下载官方对应包
+
+release 包分类说明包括以下两类，但不表示对应压缩包已经取得。
+现有 MCUX SDK 工作区不能直接冒充厂商 M FreeRTOS release 包：
+
+- `m_freertos_sdk/`
+- `scfw/`
+
+### `compile_targets/`
+
+放编译对象入口说明。
+这层不负责记录源码资产事实，
+而是由 `compile` owner，用来回答：
+
+- 我现在到底要编什么
+- 对应依赖哪些源码资产、SDK、toolchain、firmware、workspace
+- 哪些目录只是输入来源，不能直接拿来编
+
+当前已收编译对象包括：
+
+- `flashbin`
+- `linux`
+- `m_freertos_sdk`
+- `zephyr`
+- `a55_rtos`
+
+### `toolchain/`
+
+放交叉编译工具链、SDK、编译环境输入。
+目录层 `README.md` 负责说明这里有哪些工具链、它们怎么分层。
+
+本机已定位的工具链及候选包括（绝对路径与实际版本见 ENVIRONMENT）：
+
+- `/opt` GNU `arm-none-eabi` 14.3.1
+- `/opt` GNU `aarch64-none-linux-gnu` 14.3.1
+- `/opt` GNU `aarch64-none-elf` 14.2.1
+- Zephyr SDK 尚待确认当前 server 的可用路径和 target/compiler，不沿用原环境目录名
+
+这三套编译器已验证版本与 target；项目 profile 和清单使用实际 `/opt` 绝对路径。
+旧 13.2/8.3 仅是历史候选，不作为本次默认值；不同 target prefix 不可静默替代。
+
+如果问题是在找编译链对应的主机侧工具链，先看这里。
+
+### `firmware/`
+
+放固定二进制输入，不和 `code_assets/projects/` / `code_assets/workspaces/` 混。
+目录层 `README.md` 负责说明这里有哪些固定输入、按什么维度组织。
+
+固定输入可以按 SoC 分类，例如：
+
+- `imx8dxl`
+- `imx943`
+- `imx95`
+
+这是分类约定，不是当前 blob 清单。当前只定位到历史 SCFW 候选，
+不能据此宣称 i.MX943/i.MX95 的 DDR/ELE/AHAB 输入已准备好。
+
+如果问题是在找 DDR firmware、ELE / AHAB 或其他固定 blob，先看这里。
+
+### `work/`
+
+放当前 case 的过程记录、日志、构建产物和临时修改。
+这是 case 工作区，不是长期共享基线。
+每个 case 一个目录，后续如果要生成交接包，应能从这里还原完整过程。
+
+如果当前任务已经明确会跨 `compile -> board-exec` 推进，
+这里同时也是运行时状态实例的落点。
+
+站在当前 Windows 工作区根视角，
+默认查看：
+
+- `../support_level/work/<case>/README.md`
+- `../support_level/work/<case>/logs/`
+- `../support_level/work/<case>/artifacts/`
+- `../support_level/work/<case>/state/`
+
+如果 `state/` 已存在，先指出它的位置和已有内容；
+如果不存在，只说明后续 owner 会在真实 case 进入对应阶段时创建实例，
+不要由 `support` 代写。
+
+### `to_absorb/`
+
+放待归纳的高价值信息。
+这里保留新发现的可复用信息及其来源 case，后续再决定吸收到哪一层。
+
+## 进入规则
+
+- 找资源位置、已有资产、已有资料、已有工具 -> 留在 `support`
+- 一旦已经明确要编某个对象 -> 进 `compile`
+- 一旦已经要碰真实板子 -> 进 `board-exec`

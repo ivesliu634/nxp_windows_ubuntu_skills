@@ -1,0 +1,4 @@
+# serial-console skill package - Python dependencies (Python 3 required)
+# Install with: pip install -r requirements.txt
+pyserial>=3.5
+PyYAML>=6.0

@@ -1,0 +1,109 @@
+schema_version: 3
+board: frdmimx95
+profile_status: partial
+adapter:
+  name: WCH CH9114 Quad USB-Serial bridge
+  usb_id: "1a86:55e8"
+  interface_count: 4
+  bridge: ch9114
+  shared_serial: true   # all four interfaces share ONE serial; split by USB location
+  bcu_capable: false    # bcu drives FTDI GPIO/I2C only; it cannot control this bridge
+baudrate: 115200
+format: 8N1
+# IMPORTANT - this FRDM board's debug bridge is a WCH CH9114, NOT the FTDI
+# FT4232H used on the i.MX EVKs. Two consequences:
+#   1. bcu cannot control this board. bcu drives board GPIO/power/boot-mode and
+#      reads the FTDI USB-config EEPROM through the FT4232H MPSSE engine; the
+#      CH9114 exposes none of that. Do NOT try "bcu eeprom/onoff/reset" here -
+#      bcu will report "failed to open ftdi device". Power/reset is physical
+#      (board switch / reset button) or via a separate debug probe.
+#   2. Interface identity model differs. FTDI gives each interface a DIFFERENT
+#      serial (shared base + trailing A/B/C/D). The CH9114 gives every interface
+#      the SAME serial (here BC43389AABCDA0AA) and separates them by USB
+#      location (1-4:x.0 / .2 / .4 / .6). serial_console.py detects the shared
+#      serial and orders interfaces by USB-location rank -> if00..if03. There is
+#      no EEPROM identity to write; doctor reports "ok" via the location model.
+#
+# Windows enumeration seen (COM numbers are volatile; re-run doctor/list):
+#   if00 = CH9114-A = location x.0 = COM180
+#   if01 = CH9114-B = location x.2 = COM178
+#   if02 = CH9114-C = location x.4 = COM179
+#   if03 = CH9114-D = location x.6 = COM177
+ports:
+  a55-linux:
+    order: 1
+    interface: if00
+    description: >
+      Cortex-A55 Linux console (SPL/U-Boot/Linux). VERIFIED on Windows: poking
+      CR on if00 (CH9114-A, COM180) returned the "imx95evk login:" prompt, so
+      this is the live A-core Linux console.
+    log_sources:
+      - spl
+      - u-boot
+      - linux
+    default_capture: true
+    required: true
+    status: verified
+  sm-monitor:
+    order: 2
+    interface: if01
+    description: >
+      System Manager (SM / SCMI system-manager) debug monitor. VERIFIED on
+      Windows: poking CR on if01 (CH9114-B, COM178) returned "*** SM Debug
+      Monitor ***" and a ">$" prompt.
+    log_sources:
+      - sm
+      - scmi
+    default_capture: true
+    required: true
+    status: verified
+  third-com:
+    order: 3
+    interface: if02
+    description: >
+      Third CH9114 interface (C, COM179). Silent when poked; candidate M33 / MCU
+      runtime console but NOT verified. Do not assign a role by guessing.
+    default_capture: false
+    required: false
+    status: unknown
+  fourth-com:
+    order: 4
+    interface: if03
+    description: >
+      Fourth CH9114 interface (D, COM177). Silent when poked; role not verified.
+    default_capture: false
+    required: false
+    status: unknown
+evidence:
+  verified_at: "2026-09-29"
+  method: >
+    Passive listen plus CR poke on all four CH9114 interfaces on Windows while
+    the board was powered and running. if00 returned the Linux login prompt and
+    if01 returned the SM Debug Monitor prompt; if02/if03 were silent. bcu is not
+    usable on this board (CH9114 bridge), so power/reset is physical. Interface
+    order is by USB location, handled by serial_console.py shared-serial model.
+  observed:
+    adapter: >
+      CH9114 shared-serial bridge (1a86:55e8, serial BC43389AABCDA0AA on all
+      four ports). serial_console.py doctor reports "ok - per-interface identity
+      from USB location (shared-serial bridge)". No FTDI EEPROM, nothing to
+      write, bcu cannot attach.
+    a55-linux: >
+      if00 (CH9114-A, COM180) VERIFIED: CR returned repeated "imx95evk login:".
+    sm-monitor: >
+      if01 (CH9114-B, COM178) VERIFIED: CR returned "*** SM Debug Monitor ***"
+      and ">$" prompt.
+    third-com: "if02 (CH9114-C, COM179) silent when poked."
+    fourth-com: "if03 (CH9114-D, COM177) silent when poked."
+notes:
+  - >-
+    Debug bridge is WCH CH9114, not FTDI. bcu (FT4232H-based) cannot control
+    this board - no eeprom/onoff/reset/boot-mode over this bridge. Use the board
+    power switch / reset button, or a separate SWD/JTAG probe, to reset.
+  - >-
+    Interfaces share ONE serial and are ordered by USB location, not by an FTDI
+    A/B/C/D letter. serial_console.py handles this via the shared-serial model
+    (adapter.shared_serial); doctor is expected to report ok, not degraded.
+  - >-
+    Only a55-linux (if00) and sm-monitor (if01) are verified. if02/if03 are
+    unverified guesses; capture a full boot before promoting them.

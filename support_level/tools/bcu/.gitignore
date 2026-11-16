@@ -1,0 +1,9 @@
+# bcu.exe is a third-party binary released by NXP on GitHub. It is fetched at
+# use time (see bin/fetch-bcu.cmd) and must NOT be committed to version control.
+# Keep it locally for ready-to-run use, but exclude it from git.
+bin/bcu.exe
+bin/bcu
+bin/bcu_mac
+
+# Download temp file created by fetch-bcu.cmd
+bin/bcu.exe.download

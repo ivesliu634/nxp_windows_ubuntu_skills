@@ -1,0 +1,25 @@
+schema_version: 1
+id: uuu
+type: host_tool
+human_doc: USAGE.md
+owner: board-exec
+summary: Windows USB download and storage writes using a release-matched UUU recipe.
+execution:
+  host: windows
+  executable: uuu.exe
+  required_prefix: []
+relations:
+  projects: []
+  compile_targets: [flashbin, linux]
+  software_stacks: []
+  release_packages: []
+  boards: []
+  tools: []
+case_required_for: [first_stage_write, second_stage_write, fat_write, full_image_restore]
+warnings:
+  - Use the Windows executable from ENVIRONMENT, not sudo or a Linux UUU path.
+  - Confirm the physical board, target medium and local input file before any write.
+  - A server artifact path is not a Windows input path; transfer and check its hash first.
+  - A successful transfer or write is not proof of U-Boot, Linux or application startup.
+evidence:
+  - USAGE.md

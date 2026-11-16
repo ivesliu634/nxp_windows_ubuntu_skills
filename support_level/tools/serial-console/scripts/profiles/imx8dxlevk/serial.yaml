@@ -1,0 +1,79 @@
+schema_version: 3
+board: imx8dxlevk
+profile_status: partial
+adapter:
+  name: FT4232H Quad HS USB-UART/FIFO IC
+  usb_id: "0403:6011"
+  interface_count: 4
+baudrate: 115200
+format: 8N1
+# Windows identity model:
+#   - adapter is identified by usb_id plus the base FTDI serial number
+#     (the serial with its trailing interface letter removed).
+#   - each interface is identified by the trailing letter of the FTDI serial:
+#       A -> if00, B -> if01, C -> if02, D -> if03
+#   - the COM number is volatile and is only a fallback hint; never treat it
+#     as a stable identity.
+# Interface layout and role assignment are migrated from the verified Linux
+# profile for the same on-board FT4232H (if00-if03 in fixed order). Windows COM
+# enumeration and role-to-interface mapping still need one captured session
+# before any port status can be upgraded to verified.
+ports:
+  first-com:
+    order: 1
+    interface: if00
+    description: First enumerated COM port; no default runtime log role assigned
+    default_capture: false
+    required: false
+    status: unknown
+  m4:
+    order: 2
+    interface: if01
+    description: Second enumerated COM port; M4 console
+    log_sources:
+      - m4
+    default_capture: true
+    required: true
+    status: unknown
+  a-core:
+    order: 3
+    interface: if02
+    description: U-Boot, Fastboot, Linux early boot and console
+    log_sources:
+      - spl
+      - u-boot
+      - fastboot
+      - linux
+    default_capture: true
+    required: true
+    status: unknown
+  scfw:
+    order: 4
+    interface: if03
+    description: SCFW (System Controller Firmware) console
+    log_sources:
+      - scfw
+    default_capture: true
+    required: true
+    status: unknown
+evidence:
+  verified_at: ""
+  note: >
+    Migrated from the Linux serial-console profile (schema 2, verified on the
+    Ubuntu host, cases 2026-07-23-imx8dxl-power-mode-ocram-suspend and
+    2026-07-24-imx8dxl-bcu-reset-serial-scope; Linux specimen was B0 LPDDR4).
+    Interface-to-role layout (if00-if03) is preserved. Windows COM enumeration
+    and role mapping are not yet confirmed on this platform; capture one boot
+    session before promoting any port to verified.
+notes:
+  - The on-board FT4232H exposes four fixed interfaces in if00-if03 order; on
+    Windows they map to the FTDI serial trailing letters A/B/C/D.
+  - if01 is the M4 console AND the channel BCU uses for board control; never run
+    BCU while capturing M4 early log on if01, or the M4 log will be lost.
+  - A BCU reset is only safe when capture explicitly excludes M4 and selects
+    only a-core (if02) and scfw (if03); this was validated three times on Linux.
+  - After BCU exits, re-probe all four interfaces and recover if01 before any
+    later M4 capture.
+  - Use the physical RESET button when the M4 early log is required.
+  - On Linux, if00/if01 could silently fall back to 9600 after re-enumeration;
+    watch for garbled output and re-open at 115200 if it happens.

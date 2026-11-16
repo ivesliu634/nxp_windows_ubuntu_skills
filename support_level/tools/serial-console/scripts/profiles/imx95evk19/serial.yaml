@@ -1,0 +1,68 @@
+schema_version: 3
+board: imx95evk19
+profile_status: partial
+adapter:
+  name: FT4232H Quad HS USB-UART/FIFO IC
+  usb_id: "0403:6011"
+  interface_count: 4
+baudrate: 115200
+format: 8N1
+# Windows identity model:
+#   - adapter is identified by usb_id plus the base FTDI serial number
+#     (the serial with its trailing interface letter removed).
+#   - each interface is identified by the trailing letter of the FTDI serial:
+#       A -> if00, B -> if01, C -> if02, D -> if03
+#   - the COM number is volatile and is only a fallback hint; never treat it
+#     as a stable identity.
+# Migrated from the Linux serial-console profile (schema 2). Interface-to-role
+# layout is preserved; if01 role is still unconfirmed on both platforms, and
+# Windows COM enumeration is not yet confirmed here.
+ports:
+  first-runtime:
+    order: 1
+    interface: if00
+    description: First FTDI runtime port; can be hidden by ft_fta_sel after bcu -keep
+    default_capture: true
+    required: false
+    status: unknown
+  second-com:
+    order: 2
+    interface: if01
+    description: Second enumerated COM port; role NOT confirmed, do not assign a role by guessing
+    default_capture: false
+    required: false
+    status: unknown
+  a55-rtos:
+    order: 3
+    interface: if02
+    description: A55 RTOS log (observed in Linux case evidence)
+    log_sources:
+      - a55-rtos
+    default_capture: true
+    required: true
+    status: unknown
+  cm33-smfw:
+    order: 4
+    interface: if03
+    description: CM33 or SMFW monitor (observed in Linux case evidence)
+    log_sources:
+      - cm33
+      - smfw
+    default_capture: true
+    required: true
+    status: unknown
+evidence:
+  verified_at: ""
+  note: >
+    Migrated from the Linux serial-console profile (schema 2, profile_status
+    partial there too). On Linux, first-runtime/a55-rtos/cm33-smfw were verified
+    and if01 role was left unconfirmed. Windows COM enumeration and role mapping
+    are not yet confirmed; capture one boot session before promoting any port to
+    verified. Do NOT assign if01 a Linux/M-core/system-manager role by guessing.
+notes:
+  - The on-board FT4232H exposes four fixed interfaces in if00-if03 order; on
+    Windows they map to the FTDI serial trailing letters A/B/C/D.
+  - if01 role is unconfirmed; leave it as second-com/unknown until captured.
+  - BCU UART mux risk - bcu reset ... -keep can leave ft_fta_sel HIGH and suppress
+    first-runtime output. A silent first port does not by itself mean the
+    firmware/system did not start; restore ft_fta_sel per board rules first.

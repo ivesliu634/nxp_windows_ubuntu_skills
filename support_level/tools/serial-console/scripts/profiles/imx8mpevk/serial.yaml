@@ -1,0 +1,98 @@
+schema_version: 3
+board: imx8mpevk
+profile_status: partial
+adapter:
+  name: FT4232H Quad HS USB-UART/FIFO IC
+  usb_id: "0403:6011"
+  interface_count: 4
+  eeprom_dnp: true   # FT4232H serial EEPROM is DNP; identity cannot be written
+baudrate: 115200
+format: 8N1
+# IMPORTANT - this board's FT4232H serial EEPROM is DNP (not populated); see
+# bcu skill schematic_eeprom_check (imx8mpevk -> DNP, base board page 19). So
+# "bcu eeprom -w" can NEVER persist an identity here: the adapter always reports
+# the bare serial "5" with no A/B/C/D interface letter, all four ports collapse
+# onto if00, and the tool must use the Windows registry interface-order fallback
+# to tell if00-if03 apart. Do NOT chase the "write EEPROM then replug" flow on
+# this board; it is physically impossible. Identify ports by registry order.
+#
+# Windows identity model (same as any FT4232H):
+#   A -> if00, B -> if01, C -> if02, D -> if03 (only when EEPROM is populated).
+#   Here there is no serial letter, so the COM<->interface mapping comes from
+#   the registry fallback. COM numbers are volatile; re-run doctor/list to map.
+ports:
+  first-com:
+    order: 1
+    interface: if00
+    description: First enumerated COM port; runtime log role not yet verified
+    default_capture: false
+    required: false
+    status: unknown
+  second-com:
+    order: 2
+    interface: if01
+    description: >
+      Second enumerated COM port (if01, registry-fallback COM9). Echoed only
+      0xFA/CR-LF noise when poked, no console banner; likely the BCU control
+      channel (as on imx93), not a log console. Not verified as a console.
+    default_capture: false
+    required: false
+    status: unknown
+  a-core:
+    order: 3
+    interface: if02
+    description: >
+      Cortex-A53 Linux console (SPL/U-Boot/Linux). VERIFIED on Windows: sending
+      CR to if02 (registry-fallback COM10) returned the "imx8mpevk login:"
+      prompt, so this is the live A53 console. Same interface index as the
+      imx93evk14 layout (a-core is if02).
+    log_sources:
+      - spl
+      - u-boot
+      - linux
+    default_capture: true
+    required: true
+    status: verified
+  m7:
+    order: 4
+    interface: if03
+    description: >
+      Candidate Cortex-M7 console (role guessed from typical i.MX8MP EVK
+      layout). NOT yet verified on this board.
+    log_sources:
+      - m7
+    default_capture: false
+    required: false
+    status: unknown
+evidence:
+  verified_at: "2026-09-29"
+  method: >
+    Skeleton only. The board powers from the boot switch (EEPROM is DNP so bcu
+    cannot drive boot mode). Ports must be located by capturing each of the four
+    registry-fallback interfaces during boot and seeing which one carries the
+    SPL / U-Boot / Linux banner. Update role status to verified once observed.
+  observed:
+    adapter: >
+      Blank/absent FTDI EEPROM: bare serial "5", no A/B/C/D letter, four ports
+      collapse onto if00 and are separated only by the Windows registry
+      interface order (id 5&2630a0c1&0&4 -> COM8/COM9/COM10/COM11 = if00-if03,
+      COM numbers volatile). doctor reports "degraded" - this is expected and
+      permanent on this board because the EEPROM is DNP, not blank.
+    a-core: >
+      if02 (registry-fallback COM10) VERIFIED: poking CR returned repeated
+      "imx8mpevk login:" prompts, i.e. the Linux login console on Cortex-A53.
+      Passive capture saw 0 bytes because the system was already idle at the
+      prompt; you must send CR to wake it.
+    second-com: >
+      if01 (COM9) returned only 0xFA/CR-LF echo, no banner; likely BCU control.
+    first-com: "if00 (COM8) no response when poked."
+    m7: "if03 (COM11) no response when poked; M7 core may not be running." 
+notes:
+  - >-
+    EEPROM is DNP (hardware no-fit), confirmed against the base-board schematic
+    via the bcu schematic_eeprom_check tool. Never rely on "bcu eeprom -w" here;
+    always identify ports through the registry fallback (doctor / list).
+  - >-
+    All port roles are UNVERIFIED guesses from the imx93evk14 / typical 8MP
+    layout. Capture each interface during boot to confirm before trusting them;
+    keep profile_status at unknown until at least the a-core console is proven.

@@ -1,0 +1,110 @@
+schema_version: 3
+board: imx943evk19b1
+profile_status: partial
+# Board naming (measured 2026-08-11, renamed 2026-08-17):
+#   The physical bench board is EVK REV B1, and bcu -board also requires
+#   imx943evk19b1 (its EEPROM stores B1; using a0 gives a board rev MISMATCH).
+#   The SoC silicon on it is A0 (soc revision 1.0). The suffix a0/b1 in
+#   imx943evk19XX denotes the EVK BOARD revision, not the silicon rev, so this
+#   profile is named after the board (b1). serial --board and bcu -board now
+#   both use imx943evk19b1.
+adapter:
+  name: FT4232H Quad HS USB-UART/FIFO IC
+  usb_id: "0403:6011"
+  interface_count: 4
+baudrate: 115200
+format: 8N1
+# Windows identity model:
+#   - adapter is identified by usb_id plus the base FTDI serial number
+#     (the serial with its trailing interface letter removed).
+#   - each interface is identified by the trailing letter of the FTDI serial:
+#       A -> if00, B -> if01, C -> if02, D -> if03
+#   - the COM number is volatile and is only a fallback hint; never treat it
+#     as a stable identity.
+# Interface layout and role assignment are inherited from the verified Linux
+# profile for the same on-board FT4232H (if00-if03 in fixed order).
+ports:
+  cm33s:
+    order: 1
+    interface: if00
+    description: CM33S console; role supplied by the user on 2026-11-10, runtime not reverified
+    default_capture: true
+    required: false
+    status: unknown
+  second-com:
+    order: 2
+    interface: if01
+    description: Second enumerated COM port; used by BCU control, no default runtime log role
+    default_capture: false
+    required: false
+    status: unknown
+  a-core:
+    order: 3
+    interface: if02
+    description: Default U-Boot and Linux console (A55 main console)
+    log_sources:
+      - spl
+      - bl31
+      - u-boot
+      - linux
+    default_capture: true
+    required: true
+    status: verified
+  sm:
+    order: 4
+    interface: if03
+    description: OEI and SMFW console (M33 System Manager debug console)
+    log_sources:
+      - sm
+      - monitor
+    default_capture: true
+    required: true
+    status: verified
+evidence:
+  verified_at: "2026-08-11"
+  method: >
+    Booted from SD via bcu (bcu reset sd -board=imx943evk19b1), then captured
+    all four interfaces on Windows with serial_console.py capture-set. Also
+    logged in over a-core and ran commands to confirm two-way interaction.
+  observed:
+    adapter: "0403:6011 base-serial 0C1819 (interfaces A/B/C/D -> if00-if03)"
+    com_map: "if00=COM153, if01=COM154, if02=COM155, if03=COM156 (volatile)"
+    a-core: >
+      if02/COM155 VERIFIED: 91105 bytes cold-ish boot capture with
+      U-Boot SPL -> BL31 -> U-Boot 2025.04 -> Starting kernel ->
+      Linux 6.18.2-rt3 -> NXP Real-time Edge Distro 3.4 -> login. Interactive
+      login confirmed: uname -r=6.18.2-rt3-1.0.0-1.0.0,
+      /sys/devices/soc0/soc_id=i.MX943, revision=1.0 (SoC A0).
+    sm: >
+      if03/COM156 VERIFIED 2026-08-20. Correct flow: start capture-set FIRST,
+      wait for ALL PORTS READY, THEN issue bcu reset sd -board=imx943evk19b1.
+      With the capture already open, bcu returned "reset successfully" and the
+      sm port captured the reset-instant banner:
+      "DDR OEI: ... SOC MIMX94(A0), Board mx943lp4-19" + "Hello from SM (Build
+      ...)" + "Press key to enter monitor mode.". This corrects the earlier
+      "0 bytes / UNCAPTURABLE" finding, which was a capture-timing artifact of
+      the old "reset first, then open" order (the reset-instant banner was
+      already gone before the port opened). bcu drives ONLY channel 1 (if01);
+      it does NOT seize the whole FT4232H, so an sm capture on if03 opened
+      before the reset is not evicted and catches the banner. No cold power
+      cycle needed.
+    first-com: "Historical if00/COM153 capture produced 0 bytes; this does not disprove its CM33S role."
+    second-com: "if01/COM154 produced 0 bytes; BCU control channel, no default log role."
+  note: >
+    a-core and sm are both verified on Windows (sm confirmed 2026-08-20 with the
+    open-capture-first, then-bcu-reset flow; bcu occupies if01 only and does not
+    evict if02/if03). CM33S was silent in that capture; its role was supplied
+    by the user on 2026-11-10, not newly verified on hardware.
+notes:
+  - "User-supplied 943 order (2026-11-10): if00=CM33S, if01=reserved for BCU, if02=U-Boot/Linux, if03=OEI/SMFW. Do not renumber missing interfaces."
+  - The on-board FT4232H exposes four fixed interfaces in if00-if03 order; on
+    Windows they map to the FTDI serial trailing letters A/B/C/D.
+  - The adapter has a per-board serial number, so resolution uses usb_id plus
+    interface (trailing letter), not a hard-coded serial.
+  - External application M-core UART adapters are not part of this four-interface profile.
+  - BCU hardware access uses FT4232H channel 1 (if01) and can drop that COM
+    port; after BCU exits, replug the adapter and re-probe.
+  - if03 (sm) is not the default Linux shell; prefer a-core for U-Boot stop and Linux login.
+  - Board revision is EVK REV B1 (from BCU EEPROM); SoC silicon is A0 (soc revision 1.0).
+  - To trigger a boot on this bench use bcu (-board=imx943evk19b1) or a Linux
+    reboot from a-core; the serial-console tool itself does not reset the board.

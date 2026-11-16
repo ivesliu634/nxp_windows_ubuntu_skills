@@ -1,0 +1,35 @@
+schema_version: 1
+id: board_knowledge
+type: support_area
+human_doc: README.md
+owner: board-exec
+
+summary: Windows 板级知识入口，区分本版操作说明与原 Ubuntu 历史实物参考。
+
+relations:
+  projects: []
+  compile_targets: []
+  software_stacks: []
+  release_packages: []
+  boards:
+    - imx8dxlevk
+    - imx93evk14
+    - imx943evk19a0
+    - imx943evk19b1
+    - imx95evk19
+  tools:
+    - serial-console
+    - uuu
+    - bcu
+
+case_required_for: []
+
+warnings:
+  - Read README.md first; nested board directories are historical Ubuntu references, not current Windows hardware observations.
+  - Board knowledge stores verified board facts, not guesses from manuals or one-off case noise.
+  - Current Windows tool usage belongs under support_level/tools; serial profiles are under tools/serial-console/scripts/profiles.
+  - Non-serial board facts belong under board_knowledge/<board>/.
+  - Board state still requires fresh probe before and after state-changing actions.
+
+evidence:
+  - README.md

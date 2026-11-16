@@ -1,0 +1,29 @@
+schema_version: 1
+id: serial-console
+type: host_tool
+human_doc: USAGE.md
+owner: board-exec
+summary: Windows serial discovery, capture and interaction using pyserial and board profiles.
+execution:
+  host: windows
+  executable: scripts\serial_console.py
+  required_prefix: [python]
+relations:
+  projects: []
+  compile_targets: []
+  software_stacks: []
+  release_packages: []
+  boards: [frdmimx95, imx8dxlevk, imx8mpevk, imx93evk14, imx943evk19b1, imx95evk19]
+  tools: []
+case_required_for: [serial_log_capture, serial_send_command, uboot_stop, interactive_serial_session]
+warnings:
+  - Select the Python interpreter recorded in ENVIRONMENT and use Windows COM discovery.
+  - Board profiles live in scripts/profiles, not the upstream Linux profiles directory.
+  - Windows recover reports missing interfaces; it does not rebind USB drivers.
+  - Shared-serial CH9114 adapters are not blank FTDI EEPROMs and cannot use BCU.
+  - READY and received bytes are not proof that the target firmware booted successfully.
+  - One process owns a COM port at a time; save raw logs in the Windows main case.
+evidence:
+  - USAGE.md
+  - reference/tool-design.md
+  - scripts/profiles/imx943evk19b1/serial.yaml

@@ -1,0 +1,99 @@
+schema_version: 3
+board: imx93evk14
+profile_status: partial
+adapter:
+  name: FT4232H Quad HS USB-UART/FIFO IC
+  usb_id: "0403:6011"
+  interface_count: 4
+baudrate: 115200
+format: 8N1
+# Windows identity model:
+#   - adapter is identified by usb_id plus the base FTDI serial number
+#     (the serial with its trailing interface letter removed).
+#   - each interface is identified by the trailing letter of the FTDI serial:
+#       A -> if00, B -> if01, C -> if02, D -> if03
+#   - the COM number (e.g. COM155) is volatile and is only a fallback hint;
+#     never treat it as a stable identity.
+ports:
+  first-com:
+    order: 1
+    interface: if00
+    description: First enumerated COM port; no default runtime log role assigned
+    default_capture: false
+    required: false
+    status: unknown
+  second-com:
+    order: 2
+    interface: if01
+    description: Second enumerated COM port; used by BCU control on Linux
+    default_capture: false
+    required: false
+    status: unknown
+  a-core:
+    order: 3
+    interface: if02
+    description: Third enumerated COM port; SPL, U-Boot and Linux console
+    log_sources:
+      - spl
+      - u-boot
+      - linux
+    default_capture: true
+    required: true
+    status: verified
+  m33:
+    order: 4
+    interface: if03
+    description: M33 console (role inherited from Linux profile; verify on Windows)
+    log_sources:
+      - m33
+    default_capture: true
+    required: true
+    status: unknown
+evidence:
+  verified_at: "2026-09-28"
+  method: >
+    Board booted from SD via boot-switch (EEPROM was blank, so bcu could not
+    drive boot mode). First the FT4232H EEPROM was programmed with
+    "bcu eeprom -w -board=imx93evk14" and the USB cable was replugged so the
+    adapter re-enumerated with a real serial number. Then the four interfaces
+    were mapped with serial_console.py list and the a-core console was poked
+    with serial_console.py send.
+  observed:
+    adapter_before_eeprom: >
+      Blank FTDI EEPROM reported bare serial "5" with no A/B/C/D trailing
+      letter, so pyserial saw four identical serials and all interfaces
+      collapsed onto if00 (COM8/9/10/11). Recoverable only via the Windows
+      registry interface-order fallback.
+    adapter_after_eeprom: >
+      bcu wrote "FTDI EEPROM SN: E10092, NXP i.MX93 14x14 EVK Board Rev B1,
+      SoC i.MX93 Rev A0". After replug the four interfaces enumerated as
+      E10092A/B/C/D -> if00-if03 (COM173/174/175/176, volatile) and the
+      native trailing-letter path identifies them without the registry
+      fallback.
+    a-core: >
+      if02 (E10092C/COM175) VERIFIED: sending a byte plus CR echoed back and
+      the board replied "imx93evk login:" / "Password:" (Linux login console).
+      Two-way interaction confirmed.
+    first-com: "if00 no default log role; not exercised."
+    second-com: "if01 BCU control channel on Linux; no default log role."
+    m33: "if03 not yet confirmed on Windows; stays unknown."
+  note: >
+    a-core is verified on Windows. first-com/second-com carry no default log
+    role and m33 is still unconfirmed, so profile_status stays partial.
+notes:
+  - >-
+    PREREQUISITE for a blank board (FTDI EEPROM empty). Program it once with
+    "bcu eeprom -w -board=imx93evk14", then REPLUG the USB cable so Windows
+    re-enumerates the adapter. Only then does the FT4232H expose a real serial
+    (E10092A/B/C/D) that the serial tool identifies natively. Without this the
+    four ports share serial "5", collapse onto if00, and the tool must fall
+    back to the Windows registry interface order.
+  - >-
+    The adapter exposes four COM interfaces; on Windows they map to the FTDI
+    serial trailing letters A/B/C/D in fixed if00-if03 order.
+  - >-
+    The 2026-09-28 bcu EEPROM write banner contained EVK Rev B1 and i.MX93
+    Rev A0 defaults. These written fields do not independently verify the
+    physical board or silicon revision; confirm both before selecting images.
+
+

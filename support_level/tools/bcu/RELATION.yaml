@@ -1,0 +1,27 @@
+schema_version: 1
+id: bcu
+type: host_tool
+human_doc: USAGE.md
+owner: board-exec
+summary: Windows BCU board control; identify the physical FTDI board before changing state.
+execution:
+  host: windows
+  executable: bin\bcu.exe
+  required_prefix: []
+relations:
+  projects: []
+  compile_targets: []
+  software_stacks: []
+  release_packages: []
+  boards: [imx93evk14, imx943evk19b1, imx95evk19]
+  tools: [serial-console]
+case_required_for: [boot_mode_change, board_reset, gpio_change, eeprom_write]
+warnings:
+  - Use the Windows executable and drivers, not sudo or a Linux BCU binary.
+  - Supported model names and historical profiles do not identify the connected board.
+  - EEPROM writes require separate authorization; never write defaults in response to a read failure.
+  - Capture readers must be READY before a reset intended to capture startup logs.
+  - Probe before and after state-changing actions and preserve the original output.
+evidence:
+  - USAGE.md
+  - profiles/imx943evk19b1/README.md
