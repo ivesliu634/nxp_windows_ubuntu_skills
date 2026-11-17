@@ -31,6 +31,9 @@ compile-tool 固定生成“配置 -> 构建”两步，在隔离源码内使用
 
 ## 本地线索
 
+查配置、板级实现和设备树时，从所选 ref 的 `configs/`、`board/freescale/`、
+`arch/arm/dts/` 和 `include/configs/` 开始；部分版本也从 `dts/upstream/` 取 DTS。
+
 当前源码里可见 i.MX9 defconfig，例如：
 
 ```text

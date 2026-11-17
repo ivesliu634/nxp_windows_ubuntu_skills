@@ -48,6 +48,9 @@ modules
 
 ## 本地线索
 
+源码检索从 `drivers/`、`Documentation/devicetree/bindings/` 和
+`arch/arm64/boot/dts/freescale/` 开始，分别核对驱动、binding 和板级 DTS。
+
 当前源码里可见的通用 i.MX arm64 defconfig 是：
 
 ```text

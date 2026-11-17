@@ -31,6 +31,11 @@ RTE 的跨项目规则不放在这里，先看 `../../../software_stacks/rte.md`
 
 ## 使用规则
 
+定位组件版本和 patch 来源时，在对应 recipe / bbappend 核对 `SRC_URI`、
+`SRCREV` 和分支变量；目录线索以所选 ref 实际存在的内容为准。
+本层不是可在仓库根直接 make 的单一固件，完整 Yocto 构建须按对应 release
+README 准备 manifest、layers 和环境，不预设 distro / machine。
+
 1. 使用前先在 `./meta-real-time-edge/` 下核对当前 ref。
 2. 只读查 recipe、bbappend、patch 可以直接在共享源码目录做。
 3. 不要把整层 patch 全灌进单个项目；先按 recipe / bbappend 分桶。

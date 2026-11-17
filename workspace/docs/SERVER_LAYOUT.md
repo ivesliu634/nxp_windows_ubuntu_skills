@@ -38,7 +38,9 @@ BCU、串口、UUU 也只在 Windows。原 Ubuntu 历史板级资料已归并到
 
 已准备的正式源码与依赖以 server setup case 的 `records/source-inventory.json`
 和 `source-validation.json` 为准；说明目录本身不能证明源码或发布包已齐备。
-资料包根的 `support_level/code_assets/<模块>/MODULE.md` 是给 Agent 看的说明，不代表 Windows 有该源码，也不需要把这些说明同步后才可操作。
+Windows 的 `support_level` 不再保留 `code_assets` 或重复模块说明。
+源码与项目说明经 SSH 读取 server 的 `support_level/code_assets`；
+Windows `server/support_level` 仅保留工具和规则的 Git 维护/部署源。
 
 用户给了自己的可编辑 checkout 时直接使用那个目录。共享源码用于查询和准备副本，避免一次任务改变别人的源码版本。
 SDK 是解包的 release，与 Git 仓库分别组织；对应 release 的 SDK 不齐时不能靠 mcuxsdk-core 近似替代。

@@ -113,6 +113,9 @@ make PLATFORM=imx PLATFORM_FLAVOR=mx943evk \
 
 ## 产物交接
 
+默认输出目录下常见路径为 `out/arm-plat-imx/core/tee-raw.bin`；
+若当前 case 指定了输出目录，以本轮实际命令和产物记录为准。
+
 核心产物是：
 
 ```text

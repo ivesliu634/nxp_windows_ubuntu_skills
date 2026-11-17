@@ -18,8 +18,9 @@ Windows 资料包根的 `server/support_level` 仅保存远端工具、规则和
 - Windows：`SoC_material`、`linux_document`、`Image`、`board_knowledge`、板级工具和完整 case。
 - server：`code_assets`、`release_packages`、`software_stacks`、`compile_targets`、
   `toolchain`、`firmware`、构建工具及同名 case 执行目录。
-- 本地 `code_assets` 只保存模块说明，不是源码。server 的项目规则和干净基线位于
-  `code_assets`，历史任务副本另在 ENVIRONMENT 登记的位置，不擅自移动。
+- Windows 支撑层不设 `code_assets` 或重复模块说明；查源码及项目说明通过
+  `myserver` 进入 server 的 `code_assets`。历史任务副本另在 ENVIRONMENT 登记的位置，
+  不擅自移动。Windows 的 `server/support_level` 仅作维护/部署源，不是源码查询入口。
 - 本地 case 主目录是 `..\support_level\work\<case>`（相对于 workspace）。先复用上下文，
   再按需将构建输入送到 server、把构建记录和所需产物取回。
 - 下文资产列表保留参考仓库的分类示例，不表示当前机器已安装这些对象；
@@ -156,6 +157,11 @@ server 不再保存板级知识、板控/串口工具、RM/镜像资料目录或
 放 Linux BSP 官方文档，如 release note、User's Guide、构建文档。
 它更偏资料层，不是源码层，也不是板级操作层。
 
+## server 资源分类
+
+以下目录均指 ENVIRONMENT 登记的 server 资源根，不是 Windows
+`support_level` 下待创建的目录。通过 `myserver` 读取对应说明和源码。
+
 ### `code_assets/`
 
 放长期保留、可按任务需要切换 ref 的代码资产。
@@ -208,7 +214,7 @@ server 资源目录保留的项目说明与规则，简要包括以下项目；
 放整体协同才有意义的工作区输入。
 这一层先回答：
 
-- 本地有哪些工作区
+- server 有哪些工作区
 - 它们各自承担什么角色
 - 哪些只是联动输入，不能自动等于“从这里编”
 
@@ -236,7 +242,7 @@ server 资源目录保留的软件栈说明：
 放不可通过 Git checkout 切版本的厂商 release 包资产。
 这一层关心的是：
 
-- 当前本地有哪些 release 包
+- 当前 server 有哪些 release 包
 - 各自对应哪些板型 / 版本
 - 如果缺目标版本，应让用户提供或下载官方对应包
 
@@ -299,6 +305,8 @@ release 包分类说明包括以下两类，但不表示对应压缩包已经取
 也不能静默替代旧固定资产矩阵中的版本和哈希。
 
 如果问题是在找 DDR firmware、ELE / AHAB 或其他固定 blob，先看这里。
+
+## Windows case 与知识归纳
 
 ### `work/`
 
