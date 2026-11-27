@@ -10,7 +10,7 @@
 
 ## 使用边界
 
-本工具通常不解析 Makefile、Kbuild 或 west manifest，也不生成 recipe。唯一
+本工具通常不解析 Makefile、Kbuild 或 west manifest，也不推断项目编译方法。唯一
 例外是 imx-mkimage：工具只读取选定 ref 的 `soc.mak` target 依赖来识别 M
 payload 文件名，不执行 Make recipe。具体编译方法仍由 compile target、项目
 `USAGE.md` 和工程判断负责。
@@ -77,17 +77,22 @@ SDK 发布包需要登录 NXP 获取，compile-tool 不自动下载。本地缺�
 可把包放入当前 case 并在清单填写 `archive/sdk_release/trust_reason`。工具只对
 本轮选中的包计算和比较 SHA-256，状态摘要仍由一次 `prepare` 自动完成。
 
-`imx-mkimage` 从选定源码 ref 的 `<SOC>/soc.mak` 提取 recipe 的 M payload
-文件名，再按 producer identity 检查类型、SoC、core role 和隔离源码内落位；
-`compile_targets/flashbin/RECIPE_CONTRACTS.yaml` 不再复制 M 镜像列表。当前完整
-非 M producer/fixed-input 合同先覆盖
-`iMX94/iMX95` 的 `flash_a55` 与 `flash_all`；其它 recipe 不会被静默放行。
-固定 AHAB/DDR firmware 同时绑定
-`compile_targets/flashbin/FIXED_ASSETS.yaml`；工具校验 role、目标文件名和
-SHA-256，不允许只靠文件名把相近版本混入当前 case。
+`imx-mkimage` 从选定源码 ref 的 `<SOC>/soc.mak` 核对 recipe 并提取 M payload
+文件名，再检查 producer 类型、SoC、core role 和落位。recipe、SoC 和 DDR 名称
+不按历史案例列举允许值；项目源码才决定实际支持的组合。当前解析器不完整解释 GNU Make，
+不能用它代替 Agent 对条件、include、完整依赖及发布版本的核对。
+`COMPILE_PROFILE.yaml` 内的通用输入规则检查所声明的角色和身份关系，
+不再要求 recipe 命中 `RECIPE_CONTRACTS.yaml`。
+固定文件条目必须含 `provenance`（实际发布包、来源或核验记录）。
+工具展示实际 SHA-256 并把输入绑定到 prepare/run，不再把 `FIXED_ASSETS.yaml`
+中的某个历史版本当作所有任务的唯一合法输入。两个历史矩阵保留作参考；
+它们的存在不证明当前版本兼容，也不替代输入来源核验。
 含 M payload 的 recipe 只接受 M producer 导出的 `nxp.mcore.bin`；工具同时
 验证 producer 成功状态、当前文件哈希、SoC 与 core role。裸 M 文件输入和
 `nxp.mcore.elf` 都不能进入 flash.bin。
+
+以下是显式维护 manifest/request 的请求入口，不是项目清单必须额外填写的记录。
+项目清单已由工具生成内部文件时，Agent 不再重复手填。
 
 通用 target：
 
@@ -97,7 +102,7 @@ records/compile/<target>/request.yaml
 state/software-state.yaml
 ```
 
-flashbin 深度模式：
+仅 `target: flashbin` 的整链路请求：
 
 ```text
 records/compile-manifest.yaml
@@ -285,3 +290,26 @@ parameters:
 - `2`：schema、参数规则、路径、状态、hash 或执行范围不合法
 - `3`：必须先执行 acquire
 - 其他非零值：源码准备或实际编译命令退出码
+
+## 测试与只读核验
+
+核验具体项目时，只传该 case 的清单；型号、revision、DDR、源码版本和 recipe
+均从清单读取，沿用项目规则，不重复声明目标，也不枚举其他芯片的拒绝条件：
+
+```bash
+python3 tests/integration/verify_checklist.py --checklist <case>/records/compile/imx-mkimage/compile.yaml
+```
+
+该入口只核验所选清单的资源合同，不构建、不上板，也不代表 producer 状态新鲜度校验。
+943 的合成用例可单独执行：
+
+```bash
+PYTHONPATH=. python3 -m unittest discover -s tests -p test_checklists.py -k Imx943ChecklistContractTests -v
+```
+
+公共工具单元测试与 case 核验分开运行。`test_checklists.py` 在临时目录生成源码和
+固件样本，只复用已登记的规则，不依赖服务器安装真实固件，也不改变生产哈希表：
+
+```bash
+PYTHONPATH=. python3 -m unittest discover -s tests -p test_checklists.py -v
+```

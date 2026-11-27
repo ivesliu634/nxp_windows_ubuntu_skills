@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
 from pathlib import Path
 import shutil
@@ -13,7 +13,8 @@ import yaml
 
 from compile_tool import checklists, composition, profiles
 from compile_tool.cli import main
-from compile_tool.common import ToolError
+from compile_tool.common import ToolError, hash_data
+from compile_tool.common import hash_file
 from compile_tool.state import load_state
 from compile_tool.manifest import load_manifest
 
@@ -310,6 +311,65 @@ class ChecklistFixture:
 
 
 class ChecklistWorkflowTests(unittest.TestCase):
+    def test_source_defined_custom_recipe_runs_with_unlisted_release_inputs(self) -> None:
+        profile = yaml.safe_load(
+            (profiles.PROJECTS_ROOT / "imx-mkimage/COMPILE_PROFILE.yaml").read_text()
+        )
+        template = yaml.safe_load(
+            (profiles.PROJECTS_ROOT / "imx-mkimage/COMPILE_CHECKLIST.yaml").read_text()
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fixture = ChecklistFixture(Path(temp_dir))
+            project = fixture.projects / "imx-mkimage"
+            original_profile = yaml.safe_load((project / "COMPILE_PROFILE.yaml").read_text())
+            profile["source"] = original_profile["source"]
+            profile["tools"] = original_profile["tools"]
+            write_yaml(project / "COMPILE_PROFILE.yaml", profile)
+            template["toolchain"] = {
+                tool["name"]: tool["path"] for tool in profile["tools"]
+            }
+            write_yaml(project / "COMPILE_CHECKLIST.yaml", template)
+            source = project / "source"
+            (source / "Makefile").write_text("include $(SOC)/soc.mak\n")
+            soc_makefile = source / "fixture_soc/soc.mak"
+            soc_makefile.parent.mkdir()
+            soc_makefile.write_text(
+                "custom_boot:\n\tmkdir -p $(SOC)\n"
+                "\tcat inputs/firmware.bin > $(SOC)/flash.bin\n"
+            )
+            run_git(source, "add", ".")
+            run_git(source, "commit", "-m", "custom source recipe")
+            run_git(source, "tag", "release-custom")
+            soc_makefile.write_text("different_target:\n\ttrue\n")
+            run_git(source, "add", ".")
+            run_git(source, "commit", "-m", "different current checkout")
+            data = yaml.safe_load((project / "COMPILE_CHECKLIST.yaml").read_text())
+            data["case_root"] = str(fixture.case_root)
+            data["source"]["ref"] = "release-custom"
+            data["parameters"].update({
+                "silicon_revision": "C0", "soc": "fixture_soc",
+                "recipe": "custom_boot", "lpddr_type": "new_ddr", "oei_enabled": "NO",
+            })
+            data["intent"]["reason"] = "use the selected source ref, not historical recipe lists"
+            data["inputs"]["files"] = [{
+                "name": "new_firmware", "slot": "firmware",
+                "path": str(fixture.fixed.relative_to(fixture.case_root)),
+                "stage_to": "inputs/firmware.bin",
+                "provenance": "synthetic release-custom package; source recipe reviewed",
+            }]
+            path = fixture.case_root / "records/compile/imx-mkimage/compile.yaml"
+            write_yaml(path, data)
+            first_patch, second_patch = fixture.patches()
+            with first_patch, second_patch:
+                report = io.StringIO()
+                with redirect_stdout(report):
+                    self.assertEqual(main(["prepare", str(path)]), 0)
+                    self.assertEqual(main(["run", str(path)]), 0)
+                self.assertIn("synthetic release-custom package", report.getvalue())
+                self.assertIn(hash_file(fixture.fixed), report.getvalue())
+                output = fixture.case_root / "artifacts/imx-mkimage/flash.bin"
+                self.assertEqual(output.read_bytes(), fixture.fixed.read_bytes())
+
     def test_oei_single_checklist_prepare_run_and_reuse(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             fixture = ChecklistFixture(Path(temp_dir))
@@ -358,6 +418,13 @@ class ChecklistWorkflowTests(unittest.TestCase):
                     self.assertEqual(main(["prepare", str(mkimage)]), 0)
                 self.assertIn("stage-oei", prepared.getvalue())
                 self.assertIn("stage-fixed", prepared.getvalue())
+                fixed = fixture.case_root / "inputs/fixed.bin"
+                fixed.write_text("changed after prepare\n")
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(main(["run", str(mkimage)]), 2)
+                fixed.write_text("fixed-v1\n")
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(main(["prepare", str(mkimage)]), 0)
                 with redirect_stdout(io.StringIO()):
                     self.assertEqual(main(["run", str(mkimage)]), 0)
                 flashbin = fixture.case_root / "artifacts" / "imx-mkimage" / "flash.bin"
@@ -379,8 +446,130 @@ class ChecklistWorkflowTests(unittest.TestCase):
                     checklists.prepare_checklist(mkimage)
 
 
-class RealProjectChecklistContractTests(unittest.TestCase):
-    def test_soc_mak_parser_discovers_m_payloads_beyond_imx94_imx95(self) -> None:
+class ProjectContractFixture:
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.support = Path(temporary.name) / "support_level"
+        self.projects = self.support / "code_assets/projects"
+        original_support = profiles.SUPPORT_LEVEL
+        for path in (original_support / "code_assets/projects").glob("*/*.yaml"):
+            destination = self.support / path.relative_to(original_support)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, destination)
+            if path.name == "COMPILE_PROFILE.yaml":
+                profile = yaml.safe_load(path.read_text(encoding="utf-8"))
+                (destination.parent / profile["source"]["path"]).mkdir(parents=True, exist_ok=True)
+        for path in (original_support / "compile_targets").rglob("*.yaml"):
+            destination = self.support / path.relative_to(original_support)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, destination)
+        self.asset_paths = {}
+        matrix_path = self.support / "compile_targets/flashbin/FIXED_ASSETS.yaml"
+        matrix = yaml.safe_load(matrix_path.read_text(encoding="utf-8"))
+        self.asset_selectors = matrix["selectors"]
+
+        def materialize(node: dict, selection: tuple = ()) -> None:
+            if "files" not in node:
+                for name, child in node.items():
+                    materialize(child, (*selection, str(name)))
+                return
+            for role, definition in node["files"].items():
+                for recipe, variant in [(None, definition), *definition.get("by_recipe", {}).items()]:
+                    filename = f"{recipe or 'default'}-{Path(definition['stage_to']).name}"
+                    asset = self.support / "test-assets" / Path(*selection) / filename
+                    asset.parent.mkdir(parents=True, exist_ok=True)
+                    asset.write_bytes(f"synthetic asset {selection} {role} {recipe}\n".encode())
+                    variant["sha256"] = hash_file(asset)
+                    self.asset_paths[(*selection, recipe, role)] = asset
+
+        materialize(matrix["assets"])
+        write_yaml(matrix_path, matrix)
+        sources = {
+            "iMX94": "MCU_IMG = m33_image.bin\nM33S_IMG = m33s_image.bin\nM70_IMG = m70_image.bin\nM71_IMG = m71_image.bin\nflash_a55: $(MCU_IMG) u-boot-atf-container.img\nflash_all: $(MCU_IMG) $(M33S_IMG) $(M70_IMG) $(M71_IMG) u-boot-atf-container.img\nflash_all_no_m7: $(MCU_IMG) $(M33S_IMG) u-boot-atf-container.img\n",
+            "iMX95": "MCU_IMG = m33_image.bin\nM7_IMG = m7_image.bin\nflash_a55: $(MCU_IMG) u-boot-atf-container.img\nflash_all: $(MCU_IMG) $(M7_IMG) u-boot-atf-container.img\n",
+            "iMX8DXL": "flash_linux_m4: m4_image.bin\n",
+            "iMX8QM": "flash_linux_m4: m4_1_image.bin m4_image.bin\n",
+        }
+        for soc, text in sources.items():
+            path = self.projects / "imx-mkimage/imx-mkimage" / soc / "soc.mak"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        for module, name, value in [
+            (profiles, "SUPPORT_LEVEL", self.support),
+            (profiles, "PROJECTS_ROOT", self.projects),
+            (checklists, "PROJECTS_ROOT", self.projects),
+        ]:
+            patcher = patch.object(module, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _fixed_asset(self, parameters: dict[str, str], role: str) -> Path:
+        selection = tuple(parameters[name] for name in self.asset_selectors)
+        variant = (*selection, parameters.get("recipe"), role)
+        return self.asset_paths.get(variant) or self.asset_paths[(*selection, None, role)]
+
+
+class ProjectChecklistRuleTests(ProjectContractFixture, unittest.TestCase):
+    def test_fixed_asset_recipe_variant_rejects_mixed_versions(self) -> None:
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            asset = root / "ahab.img"
+            old_content = b"old-pinned-ahab"
+            new_content = b"rte35-pinned-ahab"
+            matrix = {
+                "schema_version": 1,
+                "kind": "project_fixed_asset_matrix",
+                "selectors": ["soc"],
+                "assets": {"iMX94": {
+                    "owned_slots": ["ahab"],
+                    "files": {"ahab": {
+                        "slot": "ahab", "stage_to": "iMX94/ahab.img",
+                        "sha256": hashlib.sha256(old_content).hexdigest(),
+                        "provenance": "old-package/ahab.img",
+                        "by_recipe": {"flash_all_no_m7": {
+                            "sha256": hashlib.sha256(new_content).hexdigest(),
+                            "provenance": "rte35-package/ahab.img",
+                        }},
+                    }},
+                }},
+            }
+            path = root / "fixed.yaml"
+            write_yaml(path, matrix)
+            reference = {"path": str(path), "hash": hash_data(matrix), "selectors": ["soc"]}
+            inputs = {"files": [{"name": "ahab", "slot": "ahab", "path": str(asset), "stage_to": "iMX94/ahab.img"}]}
+            for recipe, accepted, rejected in (
+                ("flash_all", old_content, new_content),
+                ("flash_all_no_m7", new_content, old_content),
+            ):
+                with self.subTest(recipe=recipe):
+                    parameters = {"soc": "iMX94", "recipe": recipe}
+                    asset.write_bytes(accepted)
+                    composition.validate_fixed_asset_contract(reference, parameters, inputs)
+                    asset.write_bytes(rejected)
+                    with self.assertRaisesRegex(ToolError, "content hash does not match"):
+                        composition.validate_fixed_asset_contract(reference, parameters, inputs)
+
+    def test_imx94_no_m7_contract_preserves_boot_chain(self) -> None:
+        matrix = yaml.safe_load(
+            (profiles.SUPPORT_LEVEL / "compile_targets/flashbin/RECIPE_CONTRACTS.yaml").read_text(encoding="utf-8")
+        )
+        recipes = matrix["recipes"]["iMX94"]
+        self.assertEqual(recipes["flash_all_no_m7"], recipes["flash_all"])
+        makefile = """MCU_IMG = m33_image.bin
+M33S_IMG = m33s_image.bin
+M70_IMG = m70_image.bin
+M71_IMG = m71_image.bin
+flash_all_no_m7: $(MCU_IMG) $(M33S_IMG) u-boot-atf-container.img
+"""
+        self.assertEqual(
+            composition.make_recipe_m_images(makefile, "flash_all_no_m7"),
+            ["m33_image.bin", "m33s_image.bin"],
+        )
+
+    def test_soc_mak_parser_handles_synthetic_multi_soc_dependencies(self) -> None:
         source = profiles.PROJECTS_ROOT / "imx-mkimage" / "imx-mkimage"
         cases = {
             ("iMX94", "flash_all"): [
@@ -390,6 +579,7 @@ class RealProjectChecklistContractTests(unittest.TestCase):
                 "m71_image.bin",
             ],
             ("iMX95", "flash_all"): ["m33_image.bin", "m7_image.bin"],
+            ("iMX94", "flash_all_no_m7"): ["m33_image.bin", "m33s_image.bin"],
             ("iMX8DXL", "flash_linux_m4"): ["m4_image.bin"],
             ("iMX8QM", "flash_linux_m4"): ["m4_1_image.bin", "m4_image.bin"],
         }
@@ -403,6 +593,17 @@ class RealProjectChecklistContractTests(unittest.TestCase):
         project: str,
         parameters: dict[str, str],
     ) -> str:
+        profile_path = profiles.PROJECTS_ROOT / project / "COMPILE_PROFILE.yaml"
+        profile = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+        canonical = profile_path.parent / profile["source"]["path"]
+        run_git(canonical, "init")
+        run_git(canonical, "config", "user.email", "fixture@example.com")
+        run_git(canonical, "config", "user.name", "Fixture")
+        (canonical / "fixture.txt").write_text("synthetic command-generation source\n")
+        run_git(canonical, "add", "fixture.txt")
+        run_git(canonical, "commit", "-m", "fixture")
+        run_git(canonical, "tag", "lf-6.18.2-1.0.0")
+        run_git(canonical, "remote", "add", "origin", profile["source"]["remote_url"])
         template_path = profiles.PROJECTS_ROOT / project / "COMPILE_CHECKLIST.yaml"
         data = yaml.safe_load(template_path.read_text(encoding="utf-8"))
         data["case_root"] = str(case_root)
@@ -479,36 +680,50 @@ class RealProjectChecklistContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ToolError, "must be one of"):
                 checklists.prepare_checklist(path)
 
-    def _mkimage_draft(self, case_root: Path, recipe: str = "flash_a55") -> Path:
+    def _mkimage_draft(self, case_root: Path, *, parameters: dict[str, str]) -> Path:
         template = profiles.PROJECTS_ROOT / "imx-mkimage" / "COMPILE_CHECKLIST.yaml"
         data = yaml.safe_load(template.read_text(encoding="utf-8"))
         data["case_root"] = str(case_root)
         data["source"]["ref"] = "lf-6.18.2-1.0.0"
-        data["parameters"].update(
-            {
-                "silicon_revision": "B0",
-                "soc": "iMX95",
-                "recipe": recipe,
-                "lpddr_type": "lpddr5",
-                "oei_enabled": "NO",
-            }
-        )
+        data["parameters"].update(parameters)
         data["intent"]["reason"] = "verify recipe input contract"
         path = case_root / "records" / "compile" / "imx-mkimage" / "compile.yaml"
         write_yaml(path, data)
         return path
 
-    def test_mkimage_recipe_contract_blocks_missing_roles_and_unknown_recipe(self) -> None:
+    def test_mkimage_checks_source_recipe_instead_of_historical_combinations(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             case_root = Path(temp_dir) / "mkimage-contract-case"
             case_root.mkdir()
-            path = self._mkimage_draft(case_root)
-            with self.assertRaisesRegex(ToolError, "requires role atf"):
+            parameters = {"soc": "iMX95", "silicon_revision": "B0", "lpddr_type": "lpddr5", "oei_enabled": "NO", "recipe": "flash_a55"}
+            path = self._mkimage_draft(case_root, parameters=parameters)
+            with self.assertRaisesRegex(ToolError, "requires M payloads"):
                 checklists.normalize_checklist(path)
 
-            path = self._mkimage_draft(case_root, recipe="flash_kernel")
-            with self.assertRaisesRegex(ToolError, "unsupported project input combination"):
+            path = self._mkimage_draft(case_root, parameters={**parameters, "recipe": "flash_kernel"})
+            with self.assertRaisesRegex(ToolError, "soc.mak does not define recipe target"):
                 checklists.normalize_checklist(path)
+
+            source = self.projects / "imx-mkimage/imx-mkimage/iMX8QM/soc.mak"
+            with source.open("a", encoding="utf-8") as handle:
+                handle.write("custom_boot:\n")
+            path = self._mkimage_draft(case_root, parameters={
+                **parameters, "soc": "iMX8QM", "recipe": "custom_boot",
+                "silicon_revision": "C0", "lpddr_type": "ddr4",
+            })
+            firmware = case_root / "new-release.bin"
+            firmware.write_bytes(b"synthetic new release")
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            data["inputs"]["files"] = [{
+                "name": "new_release", "slot": "firmware", "path": firmware.name,
+                "stage_to": "iMX8QM/new-release.bin",
+                "provenance": "synthetic release C0; source reviewed for custom_boot",
+            }]
+            write_yaml(path, data)
+            normalized = checklists.normalize_checklist(path)
+            self.assertEqual(normalized["parameters"]["recipe"], "custom_boot")
+            self.assertEqual(normalized["make_recipe"]["required_m_payloads"], {})
+            self.assertIsNone(normalized["profile"]["fixed_asset_contract"])
 
     def _producer_stub(
         self,
@@ -532,7 +747,8 @@ class RealProjectChecklistContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             case_root = Path(temp_dir) / "mkimage-complete-contract-case"
             case_root.mkdir()
-            path = self._mkimage_draft(case_root)
+            parameters = {"soc": "iMX95", "silicon_revision": "B0", "lpddr_type": "lpddr5", "oei_enabled": "NO", "recipe": "flash_a55"}
+            path = self._mkimage_draft(case_root, parameters=parameters)
             atf = self._producer_stub(
                 case_root,
                 "imx-atf",
@@ -551,8 +767,7 @@ class RealProjectChecklistContractTests(unittest.TestCase):
             ahab = case_root / "inputs" / "mx95b0-ahab-container.img"
             ahab.parent.mkdir()
             shutil.copyfile(
-                profiles.SUPPORT_LEVEL
-                / "firmware/imx95/firmware-ele-imx-2.0.3-286c884/mx95b0-ahab-container.img",
+                self._fixed_asset(parameters, "ahab"),
                 ahab,
             )
             data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -593,6 +808,7 @@ class RealProjectChecklistContractTests(unittest.TestCase):
                         "slot": "ahab",
                         "path": str(ahab.relative_to(case_root)),
                         "stage_to": "iMX95/mx95b0-ahab-container.img",
+                        "provenance": "synthetic firmware release used by this test",
                     }
                 ],
             }
@@ -629,14 +845,18 @@ class RealProjectChecklistContractTests(unittest.TestCase):
             self.assertEqual(checklists.normalize_checklist(path)["project"], "imx-mkimage")
 
             ahab.write_bytes(b"wrong fixed asset\n")
-            with self.assertRaisesRegex(ToolError, "content hash does not match"):
+            self.assertEqual(checklists.normalize_checklist(path)["project"], "imx-mkimage")
+            del data["inputs"]["files"][0]["provenance"]
+            write_yaml(path, data)
+            with self.assertRaisesRegex(ToolError, "requires provenance"):
                 checklists.normalize_checklist(path)
 
     def test_mkimage_flash_all_requires_mcore_bin_producer_roles(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             case_root = Path(temp_dir) / "mkimage-mcore-contract-case"
             case_root.mkdir()
-            path = self._mkimage_draft(case_root, recipe="flash_all")
+            parameters = {"soc": "iMX95", "silicon_revision": "B0", "lpddr_type": "lpddr5", "oei_enabled": "NO", "recipe": "flash_all"}
+            path = self._mkimage_draft(case_root, parameters=parameters)
             atf = self._producer_stub(
                 case_root, "imx-atf", {"platform": "imx95", "spd": "none"}
             )
@@ -671,8 +891,7 @@ class RealProjectChecklistContractTests(unittest.TestCase):
             ahab = case_root / "inputs/mx95b0-ahab-container.img"
             ahab.parent.mkdir()
             shutil.copyfile(
-                profiles.SUPPORT_LEVEL
-                / "firmware/imx95/firmware-ele-imx-2.0.3-286c884/mx95b0-ahab-container.img",
+                self._fixed_asset(parameters, "ahab"),
                 ahab,
             )
             data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -685,7 +904,7 @@ class RealProjectChecklistContractTests(unittest.TestCase):
                     {"name": "m7", "slot": "m_payload", "checklist": str(m_sdk.relative_to(case_root)), "artifact": "m7.bin", "stage_to": "iMX95/m7_image.bin"},
                 ],
                 "files": [
-                    {"name": "ahab", "slot": "ahab", "path": str(ahab.relative_to(case_root)), "stage_to": "iMX95/mx95b0-ahab-container.img"}
+                    {"name": "ahab", "slot": "ahab", "path": str(ahab.relative_to(case_root)), "stage_to": "iMX95/mx95b0-ahab-container.img", "provenance": "synthetic firmware release"}
                 ],
             }
             write_yaml(path, data)
@@ -708,6 +927,15 @@ class RealProjectChecklistContractTests(unittest.TestCase):
                 ToolError, "soc.mak recipe iMX95/flash_all requires M payloads"
             ):
                 checklists.normalize_checklist(path)
+            without_m["inputs"]["files"].append({
+                "name": "disguised_m7", "slot": "firmware",
+                "path": str(ahab.relative_to(case_root)),
+                "stage_to": "iMX95/m7_image.bin",
+                "provenance": "must not bypass the M producer contract",
+            })
+            write_yaml(path, without_m)
+            with self.assertRaisesRegex(ToolError, "requires M payloads"):
+                checklists.normalize_checklist(path)
             write_yaml(path, data)
 
             m_data = yaml.safe_load(m_sdk.read_text(encoding="utf-8"))
@@ -729,18 +957,13 @@ class RealProjectChecklistContractTests(unittest.TestCase):
     def test_mkimage_fixed_asset_catalog_requires_exact_oei_firmware_set(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            ele = profiles.SUPPORT_LEVEL / "firmware/imx95/firmware-ele-imx-2.0.3-286c884"
-            ddr = (
-                profiles.SUPPORT_LEVEL
-                / "firmware/imx95/firmware-imx-8.29-8741a3b/firmware/ddr/synopsys"
-            )
-            sources = {
-                "ahab": ele / "mx95b0-ahab-container.img",
-                "lpddr_imem": ddr / "lpddr5_imem_v202409.bin",
-                "lpddr_dmem": ddr / "lpddr5_dmem_v202409.bin",
-                "lpddr_imem_qb": ddr / "lpddr5_imem_qb_v202409.bin",
-                "lpddr_dmem_qb": ddr / "lpddr5_dmem_qb_v202409.bin",
+            parameters = {
+                "soc": "iMX95", "silicon_revision": "B0",
+                "lpddr_type": "lpddr5", "oei_enabled": "YES",
             }
+            sources = {role: self._fixed_asset(parameters, role) for role in (
+                "ahab", "lpddr_imem", "lpddr_dmem", "lpddr_imem_qb", "lpddr_dmem_qb",
+            )}
             files = []
             for name, source in sources.items():
                 destination = root / source.name
@@ -750,10 +973,15 @@ class RealProjectChecklistContractTests(unittest.TestCase):
                         "name": name,
                         "slot": "ahab" if name == "ahab" else "firmware",
                         "path": str(destination),
-                        "stage_to": f"iMX95/{source.name}",
+                        "stage_to": f"iMX95/{source.name.removeprefix('default-')}",
                     }
                 )
-            profile = profiles.load_compile_profile("imx-mkimage")
+            matrix_path = self.support / "compile_targets/flashbin/FIXED_ASSETS.yaml"
+            matrix = yaml.safe_load(matrix_path.read_text(encoding="utf-8"))
+            catalog_reference = {
+                "path": str(matrix_path), "hash": hash_data(matrix),
+                "selectors": matrix["selectors"],
+            }
             parameters = {
                 "soc": "iMX95",
                 "silicon_revision": "B0",
@@ -761,16 +989,91 @@ class RealProjectChecklistContractTests(unittest.TestCase):
                 "oei_enabled": "YES",
             }
             composition.validate_fixed_asset_contract(
-                profile["fixed_asset_contract"],
+                catalog_reference,
                 parameters,
                 {"artifacts": [], "files": files},
             )
             with self.assertRaisesRegex(ToolError, "requires roles: lpddr_dmem_qb"):
                 composition.validate_fixed_asset_contract(
-                    profile["fixed_asset_contract"],
+                    catalog_reference,
                     parameters,
                     {"artifacts": [], "files": files[:-1]},
                 )
+
+
+class Imx943ChecklistContractTests(ProjectContractFixture, unittest.TestCase):
+    def test_a0_lpddr4_no_m7_accepts_m33s_and_rejects_mixed_inputs(self) -> None:
+        case_root = self.support / "work/imx943-case"
+        case_root.mkdir(parents=True)
+        template = self.projects / "imx-mkimage/COMPILE_CHECKLIST.yaml"
+        data = yaml.safe_load(template.read_text(encoding="utf-8"))
+        data["case_root"] = str(case_root)
+        data["source"]["ref"] = "lf-6.18.20-2.0.0"
+        parameters = {
+            "soc": "iMX94", "silicon_revision": "A0", "lpddr_type": "lpddr4",
+            "oei_enabled": "YES", "recipe": "flash_all_no_m7",
+        }
+        data["parameters"].update(parameters)
+        data["intent"]["reason"] = "synthetic imx943 A0 LPDDR4 input contract"
+        producers = [
+            ("oei", "imx-oei", "oei_ddr", "oei-m33-ddr.bin", {"silicon_revision": "A0", "board": "mx943lp4-15", "oei_type": "ddr"}),
+            ("atf", "imx-atf", "bl31", "bl31.bin", {"platform": "imx94", "spd": "opteed"}),
+            ("uboot_bin", "real-time-edge-uboot", "uboot_bin", "u-boot.bin", {"defconfig": "imx943_evk_defconfig", "jobs": "8"}),
+            ("uboot_spl", "real-time-edge-uboot", "uboot_spl", "u-boot-spl.bin", {"defconfig": "imx943_evk_defconfig", "jobs": "8"}),
+            ("smfw", "imx-sm", "smfw", "m33_image.bin", {"config": "other/mx94rtecm70netc"}),
+            ("optee", "imx-optee-os", "tee", "tee.bin", {"platform": "imx", "platform_flavor": "mx943evk"}),
+        ]
+        artifacts = []
+        for slot, project, artifact, filename, values in producers:
+            relative = f"records/compile/{project}/compile.yaml"
+            write_yaml(case_root / relative, {
+                "schema_version": 1, "kind": "project_compile_checklist",
+                "project": project, "parameters": values,
+            })
+            artifacts.append({"name": slot, "slot": slot, "checklist": relative,
+                              "artifact": artifact, "stage_to": f"iMX94/{filename}"})
+        m_path = case_root / "records/compile/m_freertos_sdk/compile.yaml"
+        m_data = {"kind": "m_freertos_sdk_compile_checklist", "jobs": {
+            "m33s": {"soc": "imx943", "core_role": "m33s"},
+            "cm70": {"soc": "imx943", "core_role": "m70"},
+        }}
+        write_yaml(m_path, m_data)
+        artifacts.append({"name": "m33s", "slot": "m_payload",
+                          "checklist": str(m_path.relative_to(case_root)),
+                          "artifact": "m33s.bin", "stage_to": "iMX94/m33s_image.bin"})
+        matrix = yaml.safe_load((self.support / "compile_targets/flashbin/FIXED_ASSETS.yaml").read_text())
+        definitions = matrix["assets"]["iMX94"]["A0"]["lpddr4"]["YES"]["files"]
+        files = []
+        for role, definition in definitions.items():
+            destination = case_root / "inputs" / Path(definition["stage_to"]).name
+            destination.parent.mkdir(exist_ok=True)
+            shutil.copyfile(self._fixed_asset(parameters, role), destination)
+            files.append({"name": role, "slot": definition["slot"],
+                          "path": str(destination.relative_to(case_root)),
+                          "stage_to": definition["stage_to"],
+                          "provenance": "synthetic release described by this fixture"})
+        data["inputs"] = {"artifacts": artifacts, "files": files}
+        path = case_root / "records/compile/imx-mkimage/compile.yaml"
+        write_yaml(path, data)
+        normalized = checklists.normalize_checklist(path)
+        self.assertEqual(normalized["parameters"], parameters)
+        self.assertEqual(list(normalized["make_recipe"]["required_m_payloads"].values()), ["m33s_image.bin"])
+        with self.subTest(rejected="extra CM70 payload"):
+            data["inputs"]["artifacts"].append({
+                "name": "cm70", "slot": "m_payload", "checklist": str(m_path.relative_to(case_root)),
+                "artifact": "cm70.bin", "stage_to": "iMX94/m70_image.bin",
+            })
+            write_yaml(path, data)
+            with self.assertRaisesRegex(ToolError, "does not consume M payloads"):
+                checklists.normalize_checklist(path)
+            data["inputs"]["artifacts"].pop()
+            write_yaml(path, data)
+        with self.subTest(rejected="missing fixed-input provenance"):
+            ahab = next(entry for entry in files if entry["slot"] == "ahab")
+            del ahab["provenance"]
+            write_yaml(path, data)
+            with self.assertRaisesRegex(ToolError, "requires provenance"):
+                checklists.normalize_checklist(path)
 
 
 if __name__ == "__main__":

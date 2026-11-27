@@ -124,8 +124,9 @@ def validate_make_recipe_m_payloads(
     slot = contract["m_payload_slot"]
     claimed_elsewhere = {
         Path(entry["stage_to"]).name
-        for entry in [*inputs["artifacts"], *inputs["files"]]
-        if entry["slot"] != slot
+        for entry in inputs["artifacts"]
+        if entry["slot"] == "smfw"
+        and entry["stage_to"] == f"{soc}/m33_image.bin"
     }
     required_files = [name for name in candidates if name not in claimed_elsewhere]
     required_destinations = {f"{soc}/{name}": name for name in required_files}
@@ -273,6 +274,11 @@ def _validate_role(
         )
         actual_parameters = _producer_parameters(entry, label)
         for name, expected in expected_parameters.items():
+            expected = str(expected)
+            for parameter, value in parameters.items():
+                expected = expected.replace(f"${{parameters.{parameter}}}", value)
+            if "${" in expected:
+                raise ToolError(f"{label} references an unresolved producer parameter")
             if actual_parameters.get(name, "").casefold() != str(expected).casefold():
                 raise ToolError(
                     f"input contract role {role} requires producer parameter "
@@ -296,29 +302,34 @@ def validate_input_contract(
 ) -> None:
     if contract_reference is None:
         return
-    path = Path(contract_reference["path"])
-    raw = mapping_value(load_yaml(path, "project input contract"), "project input contract")
-    if hash_data(raw) != contract_reference["hash"]:
-        raise ToolError("project input contract changed after profile loading")
-    reject_unknown_keys(raw, {"schema_version", "kind", "selectors", "recipes"}, "project input contract")
-    if raw.get("schema_version") != 1 or raw.get("kind") != "project_input_matrix":
-        raise ToolError("project input contract identity is invalid")
-    selectors = raw.get("selectors")
-    if selectors != contract_reference["selectors"]:
-        raise ToolError("project input contract selectors do not match the profile")
-    selected_contract: Any = raw.get("recipes")
-    selector_values: list[str] = []
-    for selector in selectors:
-        value = parameters[selector]
-        selector_values.append(value)
-        selected_contract = mapping_value(
-            selected_contract, "project input contract selector matrix"
-        ).get(value)
-        if selected_contract is None:
-            raise ToolError(
-                "unsupported project input combination: " + "/".join(selector_values)
-            )
-    contract = mapping_value(selected_contract, "selected project input contract")
+    if "rules" in contract_reference:
+        contract = mapping_value(contract_reference["rules"], "project input rules")
+        if hash_data(contract) != contract_reference["hash"]:
+            raise ToolError("project input rules changed after profile loading")
+    else:
+        path = Path(contract_reference["path"])
+        raw = mapping_value(load_yaml(path, "project input contract"), "project input contract")
+        if hash_data(raw) != contract_reference["hash"]:
+            raise ToolError("project input contract changed after profile loading")
+        reject_unknown_keys(raw, {"schema_version", "kind", "selectors", "recipes"}, "project input contract")
+        if raw.get("schema_version") != 1 or raw.get("kind") != "project_input_matrix":
+            raise ToolError("project input contract identity is invalid")
+        selectors = raw.get("selectors")
+        if selectors != contract_reference["selectors"]:
+            raise ToolError("project input contract selectors do not match the profile")
+        selected_contract: Any = raw.get("recipes")
+        selector_values: list[str] = []
+        for selector in selectors:
+            value = parameters[selector]
+            selector_values.append(value)
+            selected_contract = mapping_value(
+                selected_contract, "project input contract selector matrix"
+            ).get(value)
+            if selected_contract is None:
+                raise ToolError(
+                    "unsupported project input combination: " + "/".join(selector_values)
+                )
+        contract = mapping_value(selected_contract, "selected project input contract")
     reject_unknown_keys(
         contract,
         {"artifacts", "files", "extra_file_slots", "relations"},
@@ -369,16 +380,30 @@ def validate_input_contract(
     for slot, definition_value in extra_slots.items():
         label = f"contract.extra_file_slots.{slot}"
         definition = mapping_value(definition_value, label)
-        reject_unknown_keys(definition, {"stage_prefix", "minimum_when"}, label)
-        prefix = text_value(definition.get("stage_prefix"), f"{label}.stage_prefix")
+        reject_unknown_keys(definition, {"stage_prefix", "stage_pattern", "minimum_when"}, label)
+        prefix = definition.get("stage_prefix")
+        pattern = definition.get("stage_pattern")
+        if (prefix is None) == (pattern is None):
+            raise ToolError(f"{label} must set exactly one of stage_prefix or stage_pattern")
+        if prefix is not None:
+            prefix = text_value(prefix, f"{label}.stage_prefix")
+        if pattern is not None:
+            try:
+                pattern = re.compile(text_value(pattern, f"{label}.stage_pattern"))
+            except re.error as exc:
+                raise ToolError(f"{label}.stage_pattern is invalid: {exc}") from exc
         selected = [
             entry for name, entry in files.items()
             if name not in file_roles and entry["slot"] == slot
         ]
         for entry in selected:
-            if not entry["stage_to"].startswith(prefix):
+            if prefix is not None and not entry["stage_to"].startswith(prefix):
                 raise ToolError(
                     f"input contract file {entry['name']} must stage below {prefix}"
+                )
+            if pattern is not None and pattern.fullmatch(entry["stage_to"]) is None:
+                raise ToolError(
+                    f"input contract file {entry['name']} has an invalid stage destination"
                 )
         minimum = definition.get("minimum_when")
         if minimum is not None and _condition_matches(minimum, parameters, f"{label}.minimum_when"):
@@ -479,9 +504,18 @@ def validate_fixed_asset_contract(
         definition = mapping_value(definition_value, label)
         reject_unknown_keys(
             definition,
-            {"slot", "stage_to", "sha256", "provenance"},
+            {"slot", "stage_to", "sha256", "provenance", "by_recipe"},
             label,
         )
+        variants = mapping_value(definition.get("by_recipe", {}), f"{label}.by_recipe")
+        for recipe, raw_variant in variants.items():
+            text_value(recipe, f"{label}.by_recipe key")
+            variant = mapping_value(raw_variant, f"{label}.by_recipe.{recipe}")
+            reject_unknown_keys(variant, {"sha256", "provenance"}, f"{label}.by_recipe.{recipe}")
+            normalize_hash(text_value(variant.get("sha256"), f"{label}.sha256"), f"{label}.sha256")
+            text_value(variant.get("provenance"), f"{label}.provenance")
+        if parameters.get("recipe") in variants:
+            definition = {**definition, **variants[parameters["recipe"]]}
         entry = selected[role]
         expected_slot = text_value(definition.get("slot"), f"{label}.slot")
         if entry["slot"] != expected_slot:

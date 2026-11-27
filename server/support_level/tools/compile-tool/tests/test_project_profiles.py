@@ -41,6 +41,32 @@ def run_git(cwd: Path, *args: str) -> str:
 
 
 class ProjectProfileInitTests(unittest.TestCase):
+    def test_mkimage_accepts_only_known_recipe_evidence_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            case_root = Path(temp_dir) / "recipe-evidence-case"
+            case_root.mkdir()
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main([
+                    "init", "imx-mkimage", "--case-root", str(case_root),
+                    "--ref", "lf-6.18.20-2.0.0", "--set", "soc=iMX94",
+                    "--set", "silicon_revision=A0", "--set", "recipe=flash_all_no_m7",
+                    "--set", "lpddr_type=lpddr4", "--set", "oei_enabled=NO",
+                ]), 0)
+            path = case_root / "records/compile/imx-mkimage/manifest.yaml"
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            values = data["components"]["imx-mkimage"]["configuration"]["values"]
+            values.update({
+                "compile_checklist.make_recipe.source": "iMX94/soc.mak",
+                "compile_checklist.make_recipe.source_hash": "sha256:" + "a" * 64,
+                "compile_checklist.make_recipe.required_m_payloads": "m33s",
+            })
+            write_yaml(path, data)
+            self.assertEqual(load_manifest(path)["target"], "imx-mkimage")
+            values["compile_checklist.make_recipe.unrecognized"] = "reject"
+            write_yaml(path, data)
+            with self.assertRaisesRegex(ToolError, "configuration values outside"):
+                load_manifest(path)
+
     def test_init_materializes_oei_profile_and_project_policy(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             case_root = Path(temp_dir) / "profile-case"

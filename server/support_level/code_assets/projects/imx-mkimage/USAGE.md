@@ -58,23 +58,25 @@ revision、SOC、recipe、producer/fixed input 选择和本轮 intent 后，
 `oei_enabled=YES` 时必须选择 `oei` artifact，并和 consumer 的 silicon
 revision 一致。
 
-`soc.mak` 是 recipe 依赖和 M 镜像文件名的事实源。compile-tool 从清单选择的
-源码 ref 读取 `<SOC>/soc.mak`，自动提取当前 target 实际需要的 M payload，
-不把 `m7/m33s/m70/m71` 列表复制到额外 YAML，也不让 AI 阅读 Makefile 全文。
-
-`compile_targets/flashbin/RECIPE_CONTRACTS.yaml` 只补充 `soc.mak` 没有表达的
-producer 类型、身份关系和当前非 M 输入合同。当前完整 producer/fixed-input
-组合仍只覆盖 `iMX94/iMX95` 的
-`flash_a55` 和 `flash_all`；未登记 recipe 不会静默执行。
+recipe 与输入以当前源码 ref 和项目说明为准，不以历史 recipe 名称表为上限。
+compile-tool 读取该 ref 的 `<SOC>/soc.mak` 核对 target 并抽取 M payload 依赖；
+这只是有界解析，不等于完整理解 GNU Make 的条件、include 和所有生成步骤。
+Agent 仍须查阅相关源码及发布说明，明确本次完整输入和实际落位。
+工具检查声明的 artifact 类型、身份、路径和 OP-TEE/ATF 关系，不替 Agent 选择业务配方。
 
 `COMPILE_POLICY.yaml` 独立要求 make 命令显式传 `REV=<value>`，并强制所有
 step 在项目自己的 `isolated_git` 副本中执行。
 
+固定文件必须填写 `provenance`，说明实际发布包、来源及核验记录，不填手工猜测的 hash。
+工具在 prepare 展示当前 SHA-256，并检查 run 消费的是同一份输入；hash 一致不自动证明
+固件适配当前板型/版本，该事实由 Agent 根据当前发布资料确认。
+`compile_targets/flashbin/RECIPE_CONTRACTS.yaml` 和 `FIXED_ASSETS.yaml`
+保留既有组合、版本及来源参考，不再默认限制新配方、新 revision 或新发布包。
+已有 case 的固定文件条目需要补充 `provenance`，更新后重新 prepare。
+
 OEI、ATF、两条 U-Boot、OP-TEE 和 SMFW 已有独立单清单。
-已知 i.MX95 B0 和 i.MX943 A0 的 AHAB/DDR firmware 由
-`compile_targets/flashbin/FIXED_ASSETS.yaml` 绑定 SHA-256。M payload 已由独立
-`m_freertos_sdk` producer 接通；SCFW 尚未完成项目自治迁移，完整旧链路仍可继续使用
-`records/compile-manifest.yaml` 深度模式。
+SCFW 尚无独立公开清单，需要已有整链路请求的场景仍可使用
+`records/compile-manifest.yaml`；不与项目清单重复手填。
 
 ## 共享源码规则
 
@@ -112,6 +114,8 @@ producer；应先完成 producer，再 assess imx-mkimage。
 - `iMX94/flash_all` 从 `soc.mak` 得到 `m33s/m70/m71` 三个文件，对应 producer
   必须是 `soc=imx943, core_role=m33s/m70/m71`，固定暂存为
   `iMX94/m33s_image.bin`、`m70_image.bin`、`m71_image.bin`；
+- `iMX94/flash_all_no_m7` 只要求 `m33s_image.bin`，对应
+  `soc=imx943, core_role=m33s`，不接受 CM70/CM71 payload；
 - producer 文件缺失、哈希变化、SoC/core role/type 错误或传入 ELF 都会阻断。
 
 ## 常见命令形态

@@ -47,8 +47,9 @@ warnings:
   - Generic targets propagate only dependencies explicitly declared in the manifest.
   - Checklist-enabled projects use one case compile.yaml as the public prepare/run input; internal manifests, commands, and requests are tool-owned.
   - M SDK uses a multi-job public compile.yaml; source builds publish ELF and BIN, while controlled imports only validate, copy, and publish.
-  - imx-mkimage recipe input roles and staging destinations are constrained by the versioned recipe matrix.
-  - Known AHAB and DDR fixed assets are constrained by role, destination, and SHA-256 in the fixed asset matrix.
+  - imx-mkimage uses source-defined recipes and project input rules, not a historical recipe allowlist.
+  - Fixed inputs require provenance; their observed hashes are bound to prepare/run, not to one historical firmware release.
+  - Agent analysis owns complete input selection and release compatibility; bounded M payload parsing does not prove either.
   - Cross-manifest artifacts require same-case producer success state, matching content hash, type, and declared identity parameters.
   - imx-mkimage M payload slots accept only nxp.mcore.bin from a successful M SDK producer with matching SoC and core role.
   - One request still executes one manifest; producer-to-consumer orchestration remains explicit.

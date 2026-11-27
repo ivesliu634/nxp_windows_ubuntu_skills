@@ -65,6 +65,21 @@ recipes:
         - {when_artifact: optee, require_artifact: atf, producer_parameter: spd, equals: opteed}
 
   iMX94:
+    flash_all_no_m7:
+      artifacts:
+        atf: {slot: atf, stage_to: iMX94/bl31.bin, required: true, producer_parameters: {platform: imx94}}
+        uboot_bin: {slot: uboot_bin, stage_to: iMX94/u-boot.bin, required: true}
+        uboot_spl: {slot: uboot_spl, stage_to: iMX94/u-boot-spl.bin, required: true}
+        smfw: {slot: smfw, stage_to: iMX94/m33_image.bin, required: true}
+        optee: {slot: optee, stage_to: iMX94/tee.bin, required: false, producer_parameters: {platform_flavor: mx943evk}}
+        oei: {slot: oei, stage_to: iMX94/oei-m33-ddr.bin, required_when: {parameter: oei_enabled, equals: 'YES'}}
+      files:
+        ahab: {slot: ahab, stage_pattern: '^iMX94/mx943[a-z0-9]+-ahab-container[.]img$', required: true}
+      extra_file_slots:
+        firmware: {stage_prefix: iMX94/, minimum_when: {parameter: oei_enabled, equals: 'YES', count: 4}}
+      relations:
+        - {when_artifact: optee, require_artifact: atf, producer_parameter: spd, equals: opteed}
+
     flash_a55:
       artifacts:
         atf: {slot: atf, stage_to: iMX94/bl31.bin, required: true, producer_parameters: {platform: imx94}}

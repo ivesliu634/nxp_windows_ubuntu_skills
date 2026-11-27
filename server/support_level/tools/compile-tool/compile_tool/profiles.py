@@ -378,10 +378,17 @@ def _normalize_input_contract(
     label: str,
     parameters: dict[str, dict[str, Any]],
     support_level: Path,
+    *,
+    allow_inline: bool = False,
 ) -> dict[str, Any] | None:
     if raw_value is None:
         return None
     raw = mapping_value(raw_value, label)
+    if allow_inline and "path" not in raw:
+        reject_unknown_keys(
+            raw, {"artifacts", "files", "extra_file_slots", "relations"}, label
+        )
+        return {"rules": raw, "hash": hash_data(raw)}
     reject_unknown_keys(raw, {"path", "selectors"}, label)
     relative = _relative_path(raw.get("path"), f"{label}.path")
     path = (support_level / relative).resolve(strict=False)
@@ -619,6 +626,7 @@ def load_compile_profile(project_or_path: str | Path) -> dict[str, Any]:
         "compile profile.input_contract",
         parameters,
         support_level,
+        allow_inline=True,
     )
     fixed_asset_contract = _normalize_input_contract(
         raw.get("fixed_asset_contract"),
@@ -1001,10 +1009,15 @@ def apply_project_profile_constraints(
         "compile_checklist.file_input.",
         "compile_checklist.artifact_input.",
     )
+    recipe_evidence_keys = {
+        "compile_checklist.make_recipe.source",
+        "compile_checklist.make_recipe.source_hash",
+        "compile_checklist.make_recipe.required_m_payloads",
+    } if profile["id"] == "imx-mkimage" else set()
     unexpected_configuration = sorted(
         key
         for key in component["configuration"]["values"]
-        if not key.startswith(allowed_prefixes)
+        if not key.startswith(allowed_prefixes) and key not in recipe_evidence_keys
     )
     if unexpected_configuration:
         raise ToolError(

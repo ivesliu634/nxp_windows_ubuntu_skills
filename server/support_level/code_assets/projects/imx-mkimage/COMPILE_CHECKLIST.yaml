@@ -20,7 +20,7 @@ parameters:
 inputs:
   # artifact 条目：{name, slot, checklist, artifact, stage_to}
   artifacts: []
-  # file 条目：{name, slot, path, stage_to}
+  # file 条目：{name, slot, path, stage_to, provenance}；provenance 填实际发布包及来源/核验记录。
   files: []
 
 toolchain:

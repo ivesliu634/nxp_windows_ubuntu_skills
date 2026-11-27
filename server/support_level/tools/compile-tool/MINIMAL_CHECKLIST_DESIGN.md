@@ -72,8 +72,10 @@ mkimage 已把 OEI、ATF、U-Boot、OP-TEE 和 SMFW 当作独立 producer。工�
 - `SOC`、`REV`、`OEI`、`LPDDR_TYPE` 和 recipe 与清单一致
 - 所有选中输入都存在，并由工具记录 SHA-256
 - artifact 来自同 case producer 的成功状态，类型、hash 和身份匹配
-- `SOC + recipe` 命中 recipe contract；M 镜像集合和 `stage_to` 从选定源码
-  ref 的 `soc.mak` 得出，其余必需角色和 slot 由 contract 补充
+- recipe 在选定源码 ref 的 `soc.mak` 中可定位；不要求命中历史 recipe 矩阵
+- M 镜像集合和 `stage_to` 从该源码得出；完整依赖和发布兼容性由 Agent 查阅项目确认，
+  不把有界 M payload 解析当作任意 GNU Make 配方的完整依赖分析
+- 固定文件填写发布包及来源/核验记录 `provenance`，工具观察实际 hash 并绑定 prepare/run
 - `oei_enabled=YES` 时必须引用同 case 成功的 `oei_ddr`
 - OEI 和 mkimage 的 silicon revision 必须一致
 - `oei_enabled=NO` 时不能选择 OEI artifact
@@ -105,10 +107,9 @@ cwd、env、原始命令和 rebuild/repack/reuse 结论。`run` 对同一张清�
 
 ## 当前后续范围
 
-- M SDK producer 已接通当前 i.MX94/i.MX95 `flash_all`；Linux remoteproc
+- M payload 通过 M SDK producer 提供；Linux remoteproc
   消费 `nxp.mcore.elf` 的上板流程尚未实现
-- 已知 i.MX95 B0 和 i.MX943 A0 的 DDR/ELE/AHAB 已绑定 fixed-asset
-  catalog 和 canonical hash；其他 SoC/revision/package 组合不会默认放行
+- 历史 DDR/ELE/AHAB 矩阵保留作来源参考，不作为新 SoC/revision/package 的能力白名单
 - SCFW 需要按 release-package producer 单独建模
 - 不做通用多项目自动编排
 - 不删除旧 flashbin 深度模式和 schema v2 状态内核

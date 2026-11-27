@@ -27,7 +27,7 @@
 当前 case 真正需要哪些输入，由 SoC、软件栈、recipe、payload 集合和验证目标共同决定。
 
 机器可执行的候选组件和依赖方向由同目录 `DEPENDENCIES.yaml` 维护。
-进入真实 flashbin 编译前，必须在当前 case 准备
+仅使用 `target: flashbin` 的整链路请求入口时，在当前 case 准备
 `records/compile-manifest.yaml`，并通过 `compile-tool assess` 得到
 `MATCHED / CHANGES_OBSERVED` 状态观察。
 未使用的候选组件也必须显式写成 `not_applicable + reason`。
@@ -39,7 +39,10 @@
 `DEPENDENCIES.yaml` 只表达“哪些候选输入会进入最终 flashbin”；
 不推断 SoC recipe，也不替代当前软件栈和项目 `USAGE.md`。
 
-## 项目自治清单与旧路径边界
+## 项目清单与整链路请求的边界
+
+两种入口二选一，不是先填项目清单再手填同一任务的内部记录。
+项目清单由工具生成 manifest/request；整链路请求才由 Agent 显式维护它们。
 
 当前已经把“上游项目怎么生产”和“flash.bin 本次消费什么”拆开：
 
@@ -64,14 +67,15 @@ records/compile/imx-mkimage/compile.yaml
 依赖方向是 `producer exports artifact -> imx-mkimage consumes artifact`，不是
 producer 依赖 flash.bin。
 
-`RECIPE_CONTRACTS.yaml` 当前只放行 `iMX94/iMX95` 的 `flash_a55`、`flash_all`，
-并约束非 M producer、artifact slot 和身份关系。M payload 集合和 mkimage
-落位由选定源码 ref 的 `<SOC>/soc.mak` 动态得出。
-`FIXED_ASSETS.yaml` 对本地已知 i.MX95 B0 LPDDR5 和 i.MX943 A0
-LPDDR4/LPDDR5 的 AHAB/DDR firmware 做 role、暂存名和 SHA-256 绑定。
-M payload 已接入独立 producer；SCFW release-package producer 仍未完成迁移。旧
+recipe 由选定源码 ref 的 `<SOC>/soc.mak` 决定，不以历史 recipe 名称表为上限。
+工具核验声明的输入槽位、producer 身份和 M payload；完整依赖及发布版本兼容性
+仍须由 Agent 根据当前源码与项目说明确认。
+固定文件在清单中填写 `provenance`（发布包及来源/核验记录）；工具展示实际 hash，
+输入变化后旧 prepare 失效。`RECIPE_CONTRACTS.yaml` 和 `FIXED_ASSETS.yaml`
+保留历史组合及来源，不再作为 mkimage 项目清单的默认能力白名单或全局固件版本锁。
+SCFW 尚无独立公开清单；需要已有整链路请求的场景继续兼容
 `records/compile-manifest.yaml`、`DEPENDENCIES.yaml` 和本目录 policy 继续兼容，
-不能删除或当作已经废弃。
+不能删除或当作已经废弃；但不能把它的填写要求叠加到项目清单入口。
 
 正常进入方式：
 

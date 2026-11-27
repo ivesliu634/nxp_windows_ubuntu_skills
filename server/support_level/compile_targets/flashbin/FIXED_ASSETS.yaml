@@ -101,6 +101,10 @@ assets:
               stage_to: iMX94/mx943a0-ahab-container.img
               sha256: 52c9a6aa8de88858cfdd23d39849d6a2d57b6b90b2d52b22d5cbaba25c4290e1
               provenance: firmware/imx943/firmware-ele-imx-2.0.3-286c884/mx943a0-ahab-container.img
+              by_recipe:
+                flash_all_no_m7:
+                  sha256: 59c9fd2a81ab9624385cfc8966ea6ab6cf1904fe29cbb7e85d5f4e9d1410b506
+                  provenance: firmware-ele-imx-2.0.6-c0b284c/mx943a0-ahab-container.img
             lpddr_imem:
               slot: firmware
               stage_to: iMX94/lpddr4x_imem_v202409.bin

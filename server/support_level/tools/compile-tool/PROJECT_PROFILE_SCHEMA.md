@@ -29,7 +29,7 @@ work/<case>/records/compile/<project>/manifest.yaml
 M SDK 不是 Git project profile，而是另一种公开清单；它仍可通过统一清单
 分发层成为 project consumer 的 artifact producer。旧 `flashbin` 深度
 manifest 继续兼容。已登记的 AHAB/DDR firmware 仍从 case
-文件输入，但已经由 fixed-asset matrix 校验版本 hash 和落位名。
+文件输入，记录来源并由工具观察 hash；历史 fixed-asset matrix 不再默认限制其版本。
 
 ## Profile
 
@@ -119,18 +119,20 @@ case 清单只能选 profile 允许的参数和工具路径；compile-tool 再�
 token 安全渲染为 prepare 报告中的原始命令。`build` 字段只保留
 `mode: isolated_git`，增加 `command` 或 `env` 会直接被拒绝。
 
-## Recipe Input Contract
+## Project Input Rules
 
-consumer 可以绑定一个参数选择的组合矩阵：
+consumer 可以在 profile 内声明不依赖 recipe 名称的通用输入规则，例如：
 
 ```yaml
 input_contract:
-  path: compile_targets/flashbin/RECIPE_CONTRACTS.yaml
-  selectors: [soc, recipe]
-
-fixed_asset_contract:
-  path: compile_targets/flashbin/FIXED_ASSETS.yaml
-  selectors: [soc, silicon_revision, lpddr_type, oei_enabled]
+  artifacts:
+    atf:
+      slot: atf
+      stage_pattern: '^.+$'
+      producer_parameters:
+        platform: ${parameters.soc}
+  extra_file_slots:
+    firmware: {stage_pattern: '^.+$'}
 
 make_recipe_inputs:
   soc_parameter: soc
@@ -139,17 +141,22 @@ make_recipe_inputs:
   soc_identity_overrides: {iMX94: imx943}
 ```
 
-profile 存储该矩阵的 hash。对于 mkimage，矩阵校验非 M producer/file role、
-slot、目标路径以及 OP-TEE 与 ATF `SPD=opteed` 等跨 producer 关系。
+这些规则绑定 profile hash。mkimage 检查已声明的非 M 输入角色和 OP-TEE/ATF
+`SPD=opteed` 等关系，但不按历史 recipe 清单决定能力上限。落位仍必须是 case
+执行副本内的安全相对路径；Agent 根据当前源码明确哪些输入必需、应放到哪里。
+`producer_parameters` 可以用 `${parameters.<name>}` 绑定当前参数。
+固定文件的公开清单条目支持 `provenance`；mkimage 要求该字段非空且不是占位值，
+工具将其写入配置指纹并展示实际文件 hash。
 
 `make_recipe_inputs` 让工具从选定源码 ref 的 `<SOC>/soc.mak` 安全读取 target
 依赖，不执行 Make recipe，并自动得出 M payload 文件名。M producer 的类型仍由
 artifact slot 约束，SoC/core role 由文件名和少量无法从 Makefile 表达的 SoC
 identity override 补充；解析结果和 `soc.mak` hash 进入组件配置指纹。
 
-`fixed_asset_contract` 使用同样的参数矩阵绑定固定二进制。
-它对 role、slot、mkimage 目标文件名和 SHA-256 做精确校验；因此 AI
-可以把 canonical firmware 复制到 case，但不能用同名的其他版本替换。
+文件型 `input_contract: {path, selectors}` 和 `fixed_asset_contract`
+仍可表达某个项目明确选定的版本约束，保留其 hash、role、slot、落位及 SHA-256 检查。
+它们不是所有项目的必填项；mkimage 默认不再绑定历史组合矩阵。
+固定文件的当前 hash 不证明发布兼容性；prepare/run 绑定只能证明执行使用同一份输入。
 
 ## Init
 
@@ -268,9 +275,7 @@ manifest 和 recipe 参数决定。
   `artifact_inputs`
 - artifact contract 证明生产者成功状态与内容身份，不证明 Makefile 内部如何
   消费该文件，也不证明最终镜像能在板上运行
-- 当前 recipe 矩阵覆盖 i.MX94/i.MX95 的 `flash_a55` 和 `flash_all`；
-  固定资产矩阵覆盖 i.MX95 B0 LPDDR5 以及 i.MX943 A0
-  LPDDR4/LPDDR5 的当前本地包版本
-- i.MX94/i.MX95 当前已登记的 `flash_all` M payload 必须来自 M SDK producer；
-  公共 mkimage 清单不再接受裸 M 文件
+- 历史 recipe/fixed-asset 矩阵保留已整理组合及包版本，不构成 mkimage 的能力上限；
+  新组合仍须根据当前源码和发布资料核对，不能把工具通过当作兼容性证明
+- 源码要求的 M payload 必须来自 M SDK producer；公共 mkimage 清单不接受裸 M 文件
 - 旧 flashbin schema v1 和 `records/compile-manifest.yaml` 尚未删除

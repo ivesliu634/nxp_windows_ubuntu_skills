@@ -12,6 +12,7 @@ from .common import (
     atomic_write_yaml,
     case_lock,
     hash_data,
+    hash_file,
     load_yaml,
     mapping_value,
     reject_unknown_keys,
@@ -103,7 +104,7 @@ def _normalize_file_entry(
     case_root: Path,
 ) -> dict[str, str]:
     raw = mapping_value(raw_value, label)
-    reject_unknown_keys(raw, {"name", "slot", "path", "stage_to"}, label)
+    reject_unknown_keys(raw, {"name", "slot", "path", "stage_to", "provenance"}, label)
     name = text_value(raw.get("name"), f"{label}.name")
     if not SAFE_ID_RE.fullmatch(name):
         raise ToolError(f"{label}.name contains unsafe characters")
@@ -113,12 +114,15 @@ def _normalize_file_entry(
     path = _case_path(raw.get("path"), f"{label}.path", case_root)
     if not path.is_file():
         raise ToolError(f"{label}.path is not an existing file: {path}")
-    return {
+    result = {
         "name": name,
         "slot": slot,
         "path": str(path),
         "stage_to": _safe_relative(raw.get("stage_to"), f"{label}.stage_to"),
     }
+    if "provenance" in raw:
+        result["provenance"] = _scalar(raw["provenance"], f"{label}.provenance")
+    return result
 
 
 def _normalize_artifact_entry(
@@ -193,6 +197,13 @@ def _normalize_inputs(
             "checklist file inputs use unknown slots: "
             + ", ".join(unknown_file_slots)
         )
+    if profile["make_recipe_inputs"] is not None:
+        for entry in files:
+            if "provenance" not in entry:
+                raise ToolError(
+                    f"checklist file input {entry['name']} requires provenance "
+                    "(release/package and source or verification record)"
+                )
     return {"artifacts": artifacts, "files": files}
 
 
@@ -353,6 +364,11 @@ def materialize_checklist_manifest(
             "stage_to": entry["stage_to"],
         }
     raw["file_inputs"] = file_inputs
+    for entry in checklist["inputs"]["files"]:
+        if "provenance" in entry:
+            raw["components"][checklist["project"]]["configuration"]["values"][
+                f"compile_checklist.file_input.{entry['name']}.provenance"
+            ] = entry["provenance"]
     raw["components"][checklist["project"]]["watched_inputs"] = [
         entry["path"] for entry in file_inputs.values()
     ]
@@ -597,8 +613,19 @@ def _render_checklist_plan(
                 "",
                 f"Recipe 事实源：{recipe['source']}",
                 f"M payload：{payloads}",
+                "核验范围：所声明输入与计划的一致性；完整依赖和版本兼容性由当前源码、项目说明和 Agent 分析确认。",
             ]
         )
+    for entry in checklist["inputs"]["files"]:
+        if "provenance" in entry:
+            lines.extend(
+                [
+                    "",
+                    f"固定输入：{entry['name']} -> {entry['stage_to']}",
+                    f"来源：{entry['provenance']}",
+                    f"当前 SHA-256：{hash_file(Path(entry['path']))}",
+                ]
+            )
     lines.extend(
         [
             "",

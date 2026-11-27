@@ -47,13 +47,17 @@ inputs:
       checklist: records/compile/imx-optee-os/compile.yaml
       artifact: tee
       stage_to: iMX95/tee.bin
+    - name: m7
+      slot: m_payload
+      checklist: records/compile/m_freertos_sdk/compile.yaml
+      artifact: m7.bin
+      stage_to: iMX95/m7_image.bin
   files:
-    - {name: ahab, slot: ahab, path: inputs/imx-mkimage/mx95b0-ahab-container.img, stage_to: iMX95/mx95b0-ahab-container.img}
-    - {name: lpddr_imem, slot: firmware, path: inputs/imx-mkimage/lpddr5_imem_v202409.bin, stage_to: iMX95/lpddr5_imem_v202409.bin}
-    - {name: lpddr_dmem, slot: firmware, path: inputs/imx-mkimage/lpddr5_dmem_v202409.bin, stage_to: iMX95/lpddr5_dmem_v202409.bin}
-    - {name: lpddr_imem_qb, slot: firmware, path: inputs/imx-mkimage/lpddr5_imem_qb_v202409.bin, stage_to: iMX95/lpddr5_imem_qb_v202409.bin}
-    - {name: lpddr_dmem_qb, slot: firmware, path: inputs/imx-mkimage/lpddr5_dmem_qb_v202409.bin, stage_to: iMX95/lpddr5_dmem_qb_v202409.bin}
-    - {name: m7, slot: m_payload, path: inputs/imx-mkimage/m7_image.bin, stage_to: iMX95/m7_image.bin}
+    - {name: ahab, slot: ahab, path: inputs/imx-mkimage/mx95b0-ahab-container.img, stage_to: iMX95/mx95b0-ahab-container.img, provenance: TBD}
+    - {name: lpddr_imem, slot: firmware, path: inputs/imx-mkimage/lpddr5_imem_v202409.bin, stage_to: iMX95/lpddr5_imem_v202409.bin, provenance: TBD}
+    - {name: lpddr_dmem, slot: firmware, path: inputs/imx-mkimage/lpddr5_dmem_v202409.bin, stage_to: iMX95/lpddr5_dmem_v202409.bin, provenance: TBD}
+    - {name: lpddr_imem_qb, slot: firmware, path: inputs/imx-mkimage/lpddr5_imem_qb_v202409.bin, stage_to: iMX95/lpddr5_imem_qb_v202409.bin, provenance: TBD}
+    - {name: lpddr_dmem_qb, slot: firmware, path: inputs/imx-mkimage/lpddr5_dmem_qb_v202409.bin, stage_to: iMX95/lpddr5_dmem_qb_v202409.bin, provenance: TBD}
 
 toolchain:
   make: /usr/bin/make

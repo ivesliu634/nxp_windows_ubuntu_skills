@@ -22,15 +22,15 @@ parameters:
   soc:
     source: user
     required: true
-    allowed: [iMX94, iMX95]
+    pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$'
   recipe:
     source: user
     required: true
-    pattern: '^flash_[A-Za-z0-9_]+$'
+    pattern: '^[A-Za-z0-9_][A-Za-z0-9_.+-]*$'
   lpddr_type:
     source: user
     required: true
-    allowed: [lpddr4, lpddr5]
+    pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$'
   oei_enabled:
     source: project
     default: 'NO'
@@ -102,22 +102,29 @@ artifact_inputs:
 file_inputs:
   ahab:
     multiple: false
-  atf:
-    multiple: false
-  uboot_bin:
-    multiple: false
-  uboot_spl:
-    multiple: false
-  optee:
-    multiple: false
-  smfw:
-    multiple: false
   firmware:
     multiple: true
 
 input_contract:
-  path: compile_targets/flashbin/RECIPE_CONTRACTS.yaml
-  selectors: [soc, recipe]
+  artifacts:
+    atf:
+      slot: atf
+      stage_pattern: '^.+$'
+      producer_parameters:
+        platform: ${parameters.soc}
+    uboot_bin: {slot: uboot_bin, stage_pattern: '^.+$'}
+    uboot_spl: {slot: uboot_spl, stage_pattern: '^.+$'}
+    smfw: {slot: smfw, stage_pattern: '^.+$'}
+    optee: {slot: optee, stage_pattern: '^.+$'}
+    oei:
+      slot: oei
+      stage_pattern: '^.+$'
+      required_when: {parameter: oei_enabled, equals: 'YES'}
+  extra_file_slots:
+    ahab: {stage_pattern: '^.+$'}
+    firmware: {stage_pattern: '^.+$'}
+  relations:
+    - {when_artifact: optee, require_artifact: atf, producer_parameter: spd, equals: opteed}
 
 # soc.mak 是 recipe 依赖和目标文件名的事实源。这里仅声明如何把其中的
 # M payload 绑定到具名 producer；不复制每个 recipe 的 M 镜像列表。
@@ -127,10 +134,6 @@ make_recipe_inputs:
   m_payload_slot: m_payload
   soc_identity_overrides:
     iMX94: imx943
-
-fixed_asset_contract:
-  path: compile_targets/flashbin/FIXED_ASSETS.yaml
-  selectors: [soc, silicon_revision, lpddr_type, oei_enabled]
 
 checklist_build:
   mode: isolated_git
