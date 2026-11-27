@@ -1,6 +1,6 @@
 # Windows UUU
 
-把已有 `uuu.exe` 放在这里，或在根目录 ENVIRONMENT 写明外部位置。本包未附带 UUU。
+把已有 `uuu.exe` 放在这里，或在 [本机环境配置](../../../workspace/local/ENVIRONMENT.md)写明外部位置。本包未附带 UUU。
 来源入口：[NXP mfgtools / UUU](https://github.com/nxp-imx/mfgtools)。
 
 在 Windows PowerShell，设 `$uuuExe` 为实际绝对路径：

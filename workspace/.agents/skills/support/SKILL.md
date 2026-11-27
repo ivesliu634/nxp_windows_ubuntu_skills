@@ -10,7 +10,7 @@ description: 定位 NXP 工作区的资料、镜像、工具、源码、SDK、to
 1. 已知目标时直接读取对应说明；位置不明时，按执行位置查资源索引：
    - [Windows 资源](../../../../support_level/README.md)：资料、镜像、板级知识、工具和完整 case。
    - [server 资源分类](../../../../server/support_level/README.md)：源码、SDK、工具链、固件和构建现场。
-2. 需要实际路径时读取工作区根 `ENVIRONMENT.md`。Windows 的 `server/support_level`
+2. 实际路径见 [本机环境配置](../../../local/ENVIRONMENT.md)。Windows 的 `server/support_level`
    是维护/部署源，不是已下载的业务源码；源码、项目版本和远端资源现状通过 SSH 核对。
 3. 只读取本次对象的 README / USAGE。已有 `RELATION.yaml` 可帮助定位关联资源和稳定 warning，
    但目录、说明或索引存在不代表资源已安装，也不代表当前实物已连接。

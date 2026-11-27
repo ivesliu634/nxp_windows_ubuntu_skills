@@ -57,7 +57,9 @@ Agent 按当前任务需要读取相关技能与资料；不能因为资源已�
 两端分工、授权范围、保护已有修改、工程判断、证据和发布边界。
 
 它不维护技能目录、不指定总入口，也不介绍一套由技能组成的调度层。
-需要实际路径、连接或工具位置时，才读取非公开的本机配置 `workspace\ENVIRONMENT.md`。
+每次工作读取 [本机环境配置](../local/ENVIRONMENT.md)，存在私有补充时一并读取。
+机器具体值集中在 `workspace\local`，不混入通用规则；配置缺项的处理要求由
+[AGENTS.md](../AGENTS.md)统一说明。
 
 ### 3.2 按需领域技能
 
@@ -98,10 +100,17 @@ Windows 仓库的结构是：
 <仓库根>\
   .github\copilot-instructions.md
   workspace\
+    README.md
     AGENTS.md
-    ENVIRONMENT.md
+    local\
+      README.md
+      ENVIRONMENT.md
     .agents\skills\
     docs\
+      porting\
+        README.md
+        PORTING.md
+        ENVIRONMENT.example.md
   support_level\
   server\
     README.md
@@ -291,10 +300,11 @@ M 核是否已打包、由谁加载、谁管理生命周期、是否满足通信
 ### 8.1 轻量仓库与重资产
 
 工作流 Git 只在 Windows 维护，保存允许公开的约定、设计文档、技能、资源说明、
-关系索引、机器规则、轻量工具脚本与测试。
+关系索引、机器规则、轻量工具脚本、测试及可公开的本机配置。
 
 业务源码仓库及其 Git 历史留在 Ubuntu；资料、SDK、工具链、固件、镜像和 case
-不随工作流发布。本机配置、凭据、内部资料和未经许可的工具二进制同样不公开。
+不随工作流发布。凭据、未获许可的内部资料和未经许可的工具二进制不公开。
+本机配置按内容判断发布范围，不因机器相关而整体排除；私有补充单独忽略。
 [Git 忽略规则](../../.gitignore)是基础排除，不代替发布前的内容审查。
 
 ### 8.2 Windows 部署源与 Ubuntu 运行文件
@@ -320,6 +330,8 @@ Ubuntu 执行需要源码 baseline 的补丁应用与 shell 语义核验。
 ## 9. 文档组织与阅读方式
 
 docs 保存长期设计文档，具体入口见 [docs README](README.md)。
+其中 [porting](porting/README.md)保存迁移方法和环境模板；
+当前机器的具体配置集中在 [local](../local/README.md)。
 架构文档先共同审阅；施工文档在架构确认后再讨论，不预先把待确认方案写成施工流程。
 
 文档按问题使用，不要求 Agent 按固定顺序通读：
@@ -331,7 +343,7 @@ docs 保存长期设计文档，具体入口见 [docs README](README.md)。
 | 某类任务如何分析和操作 | 对应技能及其按需资料 |
 | 某个目录有哪些对象 | 对应 README |
 | 项目/工具的具体输入与操作 | 对应 USAGE、清单与 policy |
-| 当前机器的路径与连接 | 非公开的本机配置 |
+| 当前机器的路径与连接 | [本机配置](../local/ENVIRONMENT.md)及可选私有补充 |
 | 本次实际发生了什么 | case 记录与原始证据 |
 
 README/USAGE 提供解释，关系索引帮助定位，机器规则供工具检查，

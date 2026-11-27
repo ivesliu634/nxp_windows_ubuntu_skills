@@ -11,7 +11,7 @@ description: 在 Ubuntu server 准备 NXP 产物或镜像，分析构建目标�
 ## 两端执行适配
 
 - 下文源码、SDK、构建对象、`compile-tool` 和其清单路径均指 server。
-  server 实际根从 ENVIRONMENT 解析，不能把 Windows 相对路径送给 server。
+  server 实际根从 [本机环境配置](../../../local/ENVIRONMENT.md)取得，不能把 Windows 相对路径送给 server。
   Windows 的 `../support_level` 是 workspace 同级资源层。
 - 命令、环境变量和 cwd 在同一次 SSH 中设置；继续使用项目原生命令与参考系统已有的输入校验。
 - server 已单独部署原 `compile-tool`、项目清单、policy、构建对象及软件栈说明，

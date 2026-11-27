@@ -4,8 +4,14 @@
 
 ## 执行位置与本机配置
 
-- 需要实际路径、连接或工具位置时读取本机 [ENVIRONMENT.md](ENVIRONMENT.md)，不输出其中的凭据。
-  配置模板见 [ENVIRONMENT.example.md](docs/ENVIRONMENT.example.md)。
+- 每次开展工作时读取本机 [ENVIRONMENT.md](local/ENVIRONMENT.md)；
+  若存在 `local\ENVIRONMENT.private.md`，一并读取其私有补充，路径按各文件声明的基准展开。
+  不输出凭据或私有内容。
+- 文件缺失、本次需要的字段缺失或仍为占位值时，明确报告缺项，按
+  [移植说明](docs/porting/PORTING.md)及[模板](docs/porting/ENVIRONMENT.example.md)协助补充；
+  不猜路径或连接，也不阻塞不依赖这些信息的讨论和工作。
+- 具体机器值集中放在 `local`，不写入本文件或通用规则。环境信息不是资源已安装、
+  远端已部署或当前板卡已连接的证明。
 - 本目录为 `workspace`，Windows 资源层在同级 `..\support_level`；目录可整体重命名，不写死资料包根目录名。
 - Windows：RM、原理图、BSP 文档、镜像、板级知识、BCU/UUU/串口/USB 操作及完整 case。
 - Ubuntu server，经 `ssh myserver`：业务源码仓库、源码搜索与修改、SDK、工具链、固定固件和构建现场。
@@ -55,5 +61,6 @@
 
 ## 发布边界
 
-本机配置不进入公开仓库。凭据、内部资料、业务源码、镜像、SDK、固件、case 记录
-和未经许可的工具二进制不随本工作流发布。
+可公开的本机配置可以提交，不因机器相关而一律排除。凭据、未获许可的内部资料、
+业务源码、镜像、SDK、固件、完整 case 和未经许可的工具二进制不随本工作流发布。
+私有补充不提交；发布前按内容检查，不能仅凭文件扩展名或目录名称判断。

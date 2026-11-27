@@ -7,6 +7,9 @@ server/          server 工具和构建规则的部署源，不含业务源码�
 ```
 
 工作区约定：[workspace/AGENTS.md](workspace/AGENTS.md)。
+工作区目录：[workspace/README.md](workspace/README.md)。
+本机配置：[workspace/local/README.md](workspace/local/README.md)。
+移植说明与模板：[workspace/docs/porting/README.md](workspace/docs/porting/README.md)。
 架构与设计文档：[workspace/docs/README.md](workspace/docs/README.md)（架构初稿待审阅）。
 资源入口：[support_level/README.md](support_level/README.md)。
 server 部署说明：[server/README.md](server/README.md)。
@@ -23,5 +26,6 @@ server 只保留源码、SDK、工具链、构建工具、固定固件和执行�
 不在全局约定中重复维护技能目录或指定固定加载顺序。
 
 仓库只发布工作流、工具脚本和构建规则。RM、原理图、硬件设计文件、官方文档、
-镜像、工具二进制、业务源码、SDK、固件、case 记录和本机 ENVIRONMENT 不随仓库发布，
-继续保存在各自的实际资源位置。
+镜像、业务源码、SDK、固件、完整 case 和未经许可的工具二进制不随仓库发布，
+继续保存在各自的实际资源位置。可公开的本机配置可以提交，具体机器值集中在
+`workspace/local`，不混入抽象规则。凭据和未获许可的内部资料不发布。

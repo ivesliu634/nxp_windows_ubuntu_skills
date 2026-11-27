@@ -10,7 +10,7 @@
 
 ## 部署范围
 
-将本目录的 `support_level` 内容对应到 Windows ENVIRONMENT 登记的
+将本目录的 `support_level` 内容对应到 [本机环境配置](../workspace/local/ENVIRONMENT.md)登记的
 server 资源根，保留这一级目录结构：
 
 | Windows 维护位置 | server 执行位置 |

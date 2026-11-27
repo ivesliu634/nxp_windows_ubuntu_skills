@@ -1,8 +1,15 @@
 # Machine-specific environment
 
-Copy this template to `workspace/ENVIRONMENT.md` on each Windows machine.
-Use paths relative to the workspace root where possible. Do not commit the completed file.
-Keep passwords, tokens and SSH private keys in approved credential storage, not this template.
+Review the published configuration in `workspace\local\ENVIRONMENT.md` against this
+template on each Windows machine. Copy this file there only when no configuration exists;
+do not overwrite an existing configuration without reviewing or backing it up.
+Windows relative paths are based on `workspace`, not `workspace\local`.
+Use absolute Linux paths for server resources and expand placeholders before use.
+Non-sensitive machine-specific values may be committed; keep concrete machine values
+here rather than in abstract workflow rules.
+An optional `workspace\local\ENVIRONMENT.private.md` may supplement private machine values;
+it is ignored by Git. State its path base explicitly.
+Keep passwords, tokens and SSH private keys in approved credential storage, not these files.
 
 ## Windows
 
@@ -37,7 +44,11 @@ Keep passwords, tokens and SSH private keys in approved credential storage, not 
 
 AI and skills run only on Windows. The server does not need this workflow's Git
 repository, an AI entrypoint, skills directories, or its own ENVIRONMENT.md.
+These fields are resource records, not automatic SSH, installation or build configuration.
+Changing this file does not update project profiles or checklists.
 
-## Observed hardware
+## Verification scope
 
-Record only current observations with dates. Historical profiles are not proof of a connected board.
+Mark missing resources as not installed or not confirmed. Record verification dates when known;
+existing paths and historical checks are not proof of current availability.
+Current board identity and state belong in case records and require fresh probes.

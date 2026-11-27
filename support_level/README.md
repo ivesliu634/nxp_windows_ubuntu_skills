@@ -1,7 +1,7 @@
 # 支撑层：位置与入口
 
 沿用 Ubuntu 参考仓库的逻辑分类，区分 Windows 资源与 server 资源。
-本页不是源码安装清单，实际路径以 [workspace/ENVIRONMENT.md](../workspace/ENVIRONMENT.md) 为准。
+本页不是源码安装清单，实际路径以 [本机环境配置](../workspace/local/ENVIRONMENT.md) 为准。
 
 | 分类 | 执行位置与入口 |
 |---|---|

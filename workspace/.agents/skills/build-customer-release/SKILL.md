@@ -13,7 +13,7 @@ shell 脚本语义检查经 `myserver` 在 server 完成，不下载源码到 Wi
 校验器涉及这些检查时也应在 server 运行，并使用 server 路径的 spec；
 Windows 留存 release 目录/压缩包、校验日志和所需记录。
 server 校验器位于其 `support_level/tools/build-customer-release/scripts/validate_release.py`，
-实际路径见 Windows ENVIRONMENT。只部署本 skill 的校验脚本，不部署整个 skill 或 AI 工作区。
+实际路径见 [本机环境配置](../../../local/ENVIRONMENT.md)。只部署本 skill 的校验脚本，不部署整个 skill 或 AI 工作区。
 Windows `server/support_level/tools/build-customer-release/scripts` 保存部署副本；
 修改本 skill 的校验器或测试后同步该副本，保持内容一致，再部署所需文件。
 若 server 尚无该工具，明确部署缺项，不把 Windows 上的语法检查当作完整发布验证。

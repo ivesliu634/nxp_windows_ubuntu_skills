@@ -5,8 +5,8 @@ description: "从 Windows 通过已有 SSH 别名 myserver 操作 Ubuntu server�
 
 # Windows 到 Ubuntu server
 
-沿用 SSH 别名 `myserver`。实际资源根、源码、SDK 和任务目录见工作区根
-`ENVIRONMENT.md`，不在通用技能中写死账号、IP 或主机路径。
+沿用 SSH 别名 `myserver`。实际资源根、源码、SDK 和任务目录见
+[本机环境配置](../../../local/ENVIRONMENT.md)，不在通用技能中写死账号、IP 或主机路径。
 不重复询问服务器拓扑或密码。
 
 ## 执行位置与入口
