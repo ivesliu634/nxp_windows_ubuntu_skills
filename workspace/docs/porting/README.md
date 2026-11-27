@@ -12,5 +12,3 @@
 | [ENVIRONMENT.example.md](ENVIRONMENT.example.md) | 填写当前机器环境信息的模板 |
 
 实际配置位于 [local](../../local/README.md)。
-
-返回 [docs 说明](../README.md)。

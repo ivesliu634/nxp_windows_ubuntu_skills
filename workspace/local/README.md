@@ -13,5 +13,3 @@
 
 模板与迁移方法位于 [porting](../docs/porting/README.md)。
 凭据仍由凭据存储管理，不因本目录存在而把密码、token 或私钥写入配置。
-
-返回 [工作区说明](../README.md)。

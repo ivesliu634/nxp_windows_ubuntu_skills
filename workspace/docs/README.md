@@ -9,5 +9,3 @@
 | [README.md](README.md) | 当前目录及文件用途的说明 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Windows + Ubuntu server 的系统结构、职责和边界说明 |
 | [porting](porting/README.md) | 将工作区迁移到其他机器的方法及环境配置模板 |
-
-返回 [工作区说明](../README.md)。

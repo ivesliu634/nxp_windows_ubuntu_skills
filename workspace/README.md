@@ -14,5 +14,3 @@
 
 Windows 资料和板级工具位于同级 [support_level](../support_level/README.md)。
 远端工具和规则的维护/部署源位于同级 [server](../server/README.md)。
-
-返回 [仓库说明](../README.md)。
