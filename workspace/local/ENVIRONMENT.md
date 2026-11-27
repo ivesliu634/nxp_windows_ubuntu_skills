@@ -40,6 +40,7 @@ Linux 路径只用于 server。`<资源根>` 等引用须先从本机配置取�
 | 发布校验器 | `<资源根>/tools/build-customer-release/scripts/validate_release.py` |
 | 项目规则与说明 | `<资源根>/code_assets/projects`、`compile_targets`、`software_stacks` |
 | 共享源码 | `<资源根>/code_assets/projects/<项目>/<仓库>`，按本次版本核对 |
+| 源码准备记录 | 已有 setup case 的 `records` 目录见私有补充；其中 `source-inventory.json` 和 `source-validation.json` 是历史准备记录，使用前仍需核对当前源码和依赖 |
 | Zephyr / HMC | `<资源根>/code_assets/workspaces/zephyr-workspace`、`hmc-workspace` |
 | MCUX SDK 工作区 | 实际位置见私有补充；不等于厂商 M FreeRTOS release 包 |
 | case 执行现场 | `<资源根>/work/<任务名>`，与 Windows 主 case 同名 |
