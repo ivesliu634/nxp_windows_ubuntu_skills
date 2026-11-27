@@ -95,16 +95,6 @@ ROM download
 | 串口出现 U-Boot | U-Boot 已执行到可观察阶段 | Linux 或业务 payload 正常 |
 | 从目标介质冷启动成功 | boot image 的主要启动链成立 | 所有异构核和业务功能正常 |
 
-## 路由
-
-根据当前 unresolved step：
-
-- 查 artifact 来源、版本、现成基线和日志：`support`
-- 生成或重打包 boot image：`compile`
-- 探测当前 USB 阶段、执行传输、写入和启动验证：`board-exec`
-- artifact、transport、device stage 和 runtime 仍被混淆：
-  继续由 `understanding` 拆分问题
-
 ## 常见误判
 
 - 把 `flash.bin` 当成运行时 owner

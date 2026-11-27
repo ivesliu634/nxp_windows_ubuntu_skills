@@ -104,16 +104,6 @@ M 核 payload 被打包进 flash.bin
 | RPMsg channel 出现 | 部分 runtime contract 已建立 | suspend/resume 等生命周期正常 |
 | resume 后通信仍正常 | 当前周期的生命周期和通信恢复成立 | 所有低功耗路径都成立 |
 
-## 路由
-
-根据当前 unresolved step：
-
-- 查 payload、板型约束、已有日志和固件来源：`support`
-- 构建 payload、修改链接、打包 boot image 或实现运行契约：`compile`
-- 执行加载启动、观察串口、操作 remoteproc 或验证运行态：`board-exec`
-- 四个维度仍被混为一个 owner：
-  继续由 `understanding` 拆分问题
-
 ## 常见误判
 
 - 把 `flash.bin` 当成 M 核运行时 owner

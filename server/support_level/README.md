@@ -28,7 +28,7 @@
 说明：
 
 - `code_assets/` 放长期保留的代码资产，下面再分 `projects/` 和 `workspaces/`
-- `compile_targets/` 放编译对象入口，由 `compile` owner
+- `compile_targets/` 放编译对象与依赖说明
 - `software_stacks/` 放跨项目的软件栈 / 软件线说明，例如 `RTE` 与 LF 家族、启动镜像内容差异
 - `release_packages/` 放不可通过 Git 切版本的厂商 release 包，例如 `m_freertos_sdk` 和 `SCFW`
 - `firmware/` 放 DDR firmware、AHAB 等固定二进制输入

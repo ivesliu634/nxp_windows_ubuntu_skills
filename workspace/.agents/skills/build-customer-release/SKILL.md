@@ -34,7 +34,7 @@ Windows `server/support_level/tools/build-customer-release/scripts` 保存部署
 1. 先读当前 case 的 `README.md`、`state/` 和产物索引，再读支撑最终结论的记录。
 2. 将声明分成：已验证、用户接受的 waiver、未验证。
 3. 不把编译成功写成上板成功，不把 channel 出现写成业务 payload 已验证，不把单板观察外推为芯片保证。
-4. 产物缺失时转 `compile`；必需的板级证据缺失时转 `board-exec`。本 skill 不默认重编或动板。
+4. 产物或必需的板级证据缺失时，列出待补项，不能宣称已验证；不为打包默认重编或动板。
 
 ## 组织内容
 

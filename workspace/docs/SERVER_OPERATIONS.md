@@ -77,7 +77,7 @@ ssh myserver 'bash /absolute/server/task/step.sh'
 
 ## 5. 编译与手工接续
 
-真实编译先进入 [compile](../.agents/skills/compile/SKILL.md)，再读 server 对应项目的 `USAGE.md`、清单和 policy。本地 MODULE 仅作查找线索，不替代构建规则。
+真实编译按 server 对应项目的 `USAGE.md`、清单和 policy 核对目标与输入。本地 MODULE 仅作查找线索，不替代构建规则。
 原始命令仍来自项目自身的 make/cmake/west 等说明，但 Agent 统一经 server 的 `compile-tool prepare → 展示 → run` 执行；不绕过工具直接编译。用户只要手工命令时提供命令，不自行启动构建。
 配置与构建分开描述，便于用户只执行其中一段。采用服务器适合的并行数，例子中的 `-j4` 可调整。
 

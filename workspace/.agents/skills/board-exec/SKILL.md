@@ -1,9 +1,9 @@
 ---
 name: board-exec
-description: 板级执行阶段高层路由层（在本机 Windows 做）。用于烧写、UUU、BCU、复位、boot mode、USB、串口日志、U-Boot、上板验证和启动故障。沿用原板级判断逻辑，底层使用 Windows 工具；server 构建与产物准备交给 compile。
+description: 在 Windows 检查和操作真实 NXP 板卡。用于烧写、UUU、BCU、复位、boot mode、USB、串口日志、U-Boot、上板验证和启动故障，核对板型、当前阶段与动作前后证据。
 ---
 
-# 板级执行阶段（高层路由层）
+# 板级操作与验证
 
 板子物理连在本机 Windows，
 所以烧写、板控、串口、USB 枚举检查都用 Windows 工具在本机做。
@@ -17,25 +17,17 @@ description: 板级执行阶段高层路由层（在本机 Windows 做）。用�
   profile 在其 `scripts\profiles`，不是 Linux 工具的 profiles 目录。
 - UUU：以 ENVIRONMENT 的实际 Windows `uuu.exe` 为准。
 - case 主目录：`..\support_level\work\<case>`；下文 `handoff`、`ledger` 和原始日志均在本地。
-- 所有命令语法以迁入的 Windows USAGE 和工具帮助为准，
+- 所有命令语法以 Windows 工具 USAGE 和工具帮助为准，
   不使用 sudo、udev、sysfs、`/dev/ttyUSB*`，不假定 Linux 版子命令在 Windows 存在。
 - 板型知识先读本地 `support_level/board_knowledge/README.md`，
   再按索引找匹配 revision，不凭参考仓库中的目录名推断本机板型。
 
-本技能只负责把板级任务收敛到：
-
-- 当前板状态
-- 目标板状态
-- 允许的下一步动作
-- 该下沉到哪个工具手册
-- 该下沉到哪个板级知识文档
-
-它不负责承载某一个工具自己的操作手册，
-也不负责承载某一块板自己的默认串口、默认下载态、特殊风险和特例动作。
+根据当前板状态、目标状态和 fresh probe 决定允许的动作。
+工具命令与具体板型的默认串口、下载态和特例按对应手册核对。
 
 ---
 
-## 进入后先做什么
+## 操作前确认
 
 第一步不是立刻发命令，
 而是先把当前板状态和目标板状态说清。
@@ -69,17 +61,7 @@ description: 板级执行阶段高层路由层（在本机 Windows 做）。用�
 - `state/handoff.yaml`
 - `state/ledger.yaml`
 
-也就是说，`board-exec` 进入后先读上下文，
-不是先急着动板。
-
----
-
-## board-exec 与 `handoff` / `ledger`
-
-`board-exec` 是第一阶段状态维护的核心 hook 点。
-
-它在这套机制里要做的不是维护一套大状态机，
-而是按固定节奏做三件事：
+## 产物与板级记录
 
 1. 读取当前 case 的交接与历史上下文
 2. 用 fresh probe 判断当前最强动态事实
@@ -98,8 +80,7 @@ description: 板级执行阶段高层路由层（在本机 Windows 做）。用�
 - 哪些前提必须先满足
 - 上板后优先验证什么
 
-`board-exec` 可以消费 `handoff`，
-但不代替 `compile` 重写交接内容。
+根据 `handoff` 核对输入，不用板级观察改写产物身份或构建记录。
 
 如果 `handoff` 描述了多个顶层写入产物，
 它们是一套不可静默混用的部署组合。
@@ -109,7 +90,8 @@ description: 板级执行阶段高层路由层（在本机 Windows 做）。用�
   确认与 server 取回记录一致；`server_path` 不是 Windows 工具的输入路径
 - 核对 Image、DTB、module 等各自的目标路径
 - 区分真正单独写入的产物和已经 `embedded_in` boot image 的组件
-- 任一文件缺失、仍有占位值、未完成两端校验、hash 不符或组合身份不清时停止写入，回到 `compile`
+- 任一文件缺失、仍有占位值、未完成两端校验、hash 不符或组合身份不清时停止写入，
+  补齐输入及来源记录后重新核验
 
 M 核、SCFW、BL31 等组件如果已经嵌入 `flash.bin`，
 只记录其构建来源和组件 hash，
@@ -117,8 +99,7 @@ M 核、SCFW、BL31 等组件如果已经嵌入 `flash.bin`，
 
 ### 2. `ledger` 只记最小动态事实
 
-如果当前 case 已经进入真实板级执行，
-`board-exec` 负责生成或更新：
+当前 case 已经开始真实板级操作时，生成或更新：
 
 - `../support_level/work/<case>/state/ledger.yaml`
 
@@ -160,13 +141,7 @@ M 核、SCFW、BL31 等组件如果已经嵌入 `flash.bin`，
 
 ---
 
-## 当前要写死的板级硬规则
-
-这里先不追求完整“状态机”。
-当前上层只写死两类真正会决定动作的规则：
-
-- `CPU0` / 板控阶段规则
-- 异构核 owner 规则
+## 板级操作约束
 
 ### 0. Windows `bcu` / `uuu` 执行规则
 
@@ -289,15 +264,10 @@ reset 是板型和实物相关能力，不能因为某一块板验证成功或�
 
 ---
 
-## 文档怎么下沉
+## 查阅工具与板型资料
 
-`board-exec` 只保留独立于工具和具体板型的板级执行原则。
-
-一旦问题已经落到某个工具或某块板的具体知识，
-就不要继续留在上层。
-
-如果目标板或目标工具旁边已有 `RELATION.yaml`，
-先读它做快速索引，再读对应 README / USAGE：
+按当前问题读取目标板和工具的 README / USAGE。
+已有 `RELATION.yaml` 可帮助定位资料：
 
 - 用板型 `RELATION.yaml` 确认可用工具、case 边界和稳定 warning
 - 用工具 `RELATION.yaml` 确认工具 owner、关联板型和会改变板状态的动作
@@ -307,26 +277,10 @@ reset 是板型和实物相关能力，不能因为某一块板验证成功或�
 `RELATION.yaml` 不替代 fresh probe。
 任何会改变板状态的动作，仍按本页前后探测和记录规则执行。
 
-### 工具问题怎么下沉
+### 工具命令
 
-如果当前问题是在问：
-
-- 某个工具怎么调用
-- 参数怎么选
-- 哪类文件该走哪种写法
-- 某个工具自己的风险边界是什么
-
-就进入：
-
-- `support_level/tools/README.md`
-- 对应工具目录里的 `USAGE.md`
-
-也就是说：
-
-- 目录层 `README.md`
-  负责说明当前有哪些工具、工具放在哪里
-- 工具旁边的 `USAGE.md`
-  负责这个工具自己的操作手册
+已知工具时直接查对应目录的 `USAGE.md`，核对参数、输入类型和风险边界；
+工具位置不明时查 `support_level/tools/README.md`。
 
 ### 串口工具统一入口
 
@@ -334,7 +288,7 @@ reset 是板型和实物相关能力，不能因为某一块板验证成功或�
 
 - `support_level/tools/serial-console/USAGE.md`
 
-不要在 `board-exec` 里直接展开 `picocom`、`screen`、`minicom`、
+不要用 `picocom`、`screen`、`minicom`、
 `cat /dev/ttyUSB*` 或临场 Python 片段。
 
 原因是串口动作不只是“打开一个口”：
@@ -345,14 +299,12 @@ reset 是板型和实物相关能力，不能因为某一块板验证成功或�
 - 要能等待 `U-Boot` 三秒倒计时并自动发回车
 - 要把串口参数和主机侧准备动作收敛到一个工具入口
 
-具体哪块板哪个 role 对应哪个串口，
-不写在 `board-exec`，
-进入对应：
+具体板型的 role 与串口映射查：
 
 - `support_level/tools/serial-console/scripts/profiles/<board>/README.md`
 - `support_level/tools/serial-console/scripts/profiles/<board>/serial.yaml`
 
-### 板型问题怎么下沉
+### 板型事实
 
 如果当前问题是在问：
 
@@ -377,10 +329,7 @@ reset 是板型和实物相关能力，不能因为某一块板验证成功或�
 
 ---
 
-## 上层只保留哪些板级执行原则
-
-下面这些可以保留在 `board-exec`，
-因为它们不依赖某一个工具，也不只属于某一块板。
+## 验证结果的边界
 
 ### 1. 先分产物类别，再选板级动作
 
@@ -439,7 +388,7 @@ reset 是板型和实物相关能力，不能因为某一块板验证成功或�
 先回头确认更强的状态信号，
 例如 boot mode、USB 枚举、下载态身份，或者其他已验证板控信号。
 
-### 6. 板级验证要分层交接
+### 6. 按实际启动阶段验证
 
 如果当前未解决的是：
 
@@ -449,7 +398,7 @@ reset 是板型和实物相关能力，不能因为某一块板验证成功或�
 那问题还属于启动阶段判断。
 
 只有当 Linux login 真的是最后一个未解决步骤时，
-才应把问题交给登录验证。
+才继续做登录验证。
 
 ### 7. 网络和应用层必须在 Linux-up 之后
 
@@ -465,31 +414,5 @@ reset 是板型和实物相关能力，不能因为某一块板验证成功或�
 - 板子已经被证明 Linux-up
 - 当前未解决步骤已经不是下载态 / `U-Boot` / 登录
 
----
-
-## 板级执行的大致顺序
-
-1. 先确认当前 case 上下文与目标状态
-2. 如果存在 `handoff`，先读交接内容
-3. fresh probe 当前最强状态信号
-4. 根据问题性质，下沉到工具手册或板级知识
-5. 执行板级动作
-6. 动作后重新探测并更新 `ledger`
-7. 继续判断是还停在板级执行层，还是应该交给登录验证、网络层或应用层
-
----
-
-## board-exec 自己最终产出什么
-
-`board-exec` 最终只应该产出这些高层结果：
-
-- 当前板状态
-- 目标板状态
-- 当前最强状态信号
-- 下一步允许的板级动作
-- 当前 `CPU0` 所处阶段
-- 当前 case 允许触碰的异构核和它们的 owner 约束
-- 当前 case 的最小动态事实摘要（`ledger`）
-- 本次要进入哪个工具 `USAGE.md`
-- 本次要进入哪个板型 `README.md`
-- 动作后应该回到哪一层继续判断
+结果说明本次实际动作、动作前后证据、当前可确认的板状态及仍未验证的部分，
+并给出原始日志和已有产物记录的位置。

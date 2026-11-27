@@ -1,13 +1,12 @@
 ---
 name: compile
-description: 编译阶段高层路由层（通过 SSH 在 Ubuntu server 做）。当任务处于“准备产物/镜像”阶段，需要理运行链路、确定编译对象和最小依赖集合，或进行 build、make、cmake、west、bitbake、交叉编译和产物交接时加载。源码与构建只在 server；Windows 板级操作交给 board-exec。
+description: 在 Ubuntu server 准备 NXP 产物或镜像，分析构建目标、最小依赖和输入，执行 build、make、cmake、west、bitbake 或交叉编译，并核对构建记录与待上板产物。
 ---
 
-# 编译阶段（高层路由层）
+# 构建与产物准备
 
-编译通过 `myserver` skill 在 Ubuntu server 上做，绝不在 Windows clone 源码或构建。
-本技能只负责先把编译任务收敛到正确编译对象和正确依赖集合，
-不负责承载某一个项目自己的具体操作手册。
+通过 `ssh myserver` 在 Ubuntu server 分析依赖、准备输入并执行构建计划。
+具体项目命令和版本要求按对应项目的 USAGE、清单与 policy 核对。
 
 ## 两端执行适配
 
@@ -23,36 +22,10 @@ description: 编译阶段高层路由层（通过 SSH 在 Ubuntu server 做）�
   Windows 资料包根的 `server/support_level` 是这些小文件的维护/部署源，不是本机编译入口。
 - Windows 主 case 为 `..\support_level\work\<case>`（相对于 workspace）；server 同名 case 保存源码和构建现场。
   构建清单在 server 使用 Linux 路径，工具生成的记录、软件状态、补丁和所需产物按需取回。
-- `software-state` 不手改；`handoff` 仍由 compile 负责。远端产物路径与 Windows
-  落地路径在 case 中分开记录，取回后核对大小和 SHA-256，再交给 board-exec。
+- `software-state` 不手改。远端产物路径与 Windows 落地路径在 case 中分开记录，
+  取回后核对大小和 SHA-256，确认后才可用于板级动作。
 - 所有 Linux 构建和业务源码 Git 操作都经 SSH；工作流自身的 Git 操作在 Windows。
   用户仅要代码修改或命令说明时不自行构建。
-
----
-
-## 什么时候进入 compile
-
-当任务已经明确落到“要准备产物”的阶段，再进入这里。
-
-适用问题：
-
-- 这次到底要准备哪类产物
-- 这次到底属于哪个编译对象
-- 这条运行链路最小需要哪些依赖
-- 哪些共享基线或固定输入可以直接使用，哪些必须重编
-- 这次应该进入哪个编译对象说明，以及后续哪些项目 `USAGE.md`
-
-不适用问题：
-
-- 资源放在哪
-- 固定输入从哪来
-- 工具链 / 固件 / SDK 目录怎么找
-- 板子当前是什么状态、接下来能不能烧写/启动/登录
-
-这些边界分别交给：
-
-- `support`
-- `board-exec`
 
 ---
 
@@ -104,8 +77,8 @@ description: 编译阶段高层路由层（通过 SSH 在 Ubuntu server 做）�
 
 ### flashbin
 
-项目自治模型当前在 OEI、ATF、U-Boot、OP-TEE、SMFW 和 imx-mkimage
-使用单清单入口：
+OEI、ATF、U-Boot、OP-TEE、SMFW 和 imx-mkimage 使用项目清单入口。
+每个项目一张清单，不要求 Agent 另填工具内部 manifest/request：
 
 ```text
 records/compile/imx-oei/compile.yaml
@@ -121,17 +94,22 @@ records/compile/m_freertos_sdk/compile.yaml
 `prepare <compile.yaml> -> run <compile.yaml>`。profile、manifest、assessment 和 request
 是工具内部实现，不由 AI 维护。producer 成功后，consumer 清单通过
 同 case `checklist + artifact` 引用其具名产物。工具校验 producer 成功
-状态、hash、type 和身份参数。imx-mkimage 的输入由当前 recipe contract
-选择，不把上游项目的编译规则重新塞回 mkimage。
+状态、hash、type 和身份参数。imx-mkimage 的实际输入由当前源码、项目说明和
+本次目标确定，工具检查所声明的输入，不把上游项目的编译规则重新塞回 mkimage。
 
 该模型当前没有自动跨 manifest 编排，必须显式先 producer、后 consumer。
-AHAB/DDR 固定资产已在当前 i.MX94/i.MX95 覆盖组合中绑定
-role、落位和 SHA-256。M payload 已通过 M SDK 公共清单成为独立 producer，
-含 M payload 的 mkimage recipe 只能消费其 `nxp.mcore.bin`；SCFW
-release-package producer 尚未完成迁移，因此旧 flashbin 深度模式继续兼容；
-不能混称为已经完成全量迁移。
+mkimage 不按历史 recipe 或固件矩阵限定可编组合。Agent 必须核对当前源码的
+recipe、完整输入及发布版本；固定文件须填写 `provenance`，工具观察 hash 并绑定
+prepare/run。M payload 通过 M SDK 公共清单引用其 `nxp.mcore.bin`。
+SCFW 尚无独立公开清单，需要已有整链路请求的场景仍可使用下述接口。
 
-flashbin 首先在当前 case 准备：
+#### 整链路请求入口（仅限明确使用 `target: flashbin` 的任务）
+
+这一接口由 Agent 显式维护整条链的 manifest/request。
+它与上面的项目清单是两种输入形式，不是同一次任务必须重复填写的两套表。
+项目清单已经由工具生成内部记录时，不再额外填写以下文件。
+
+仅在使用整链路请求入口时，在当前 case 准备：
 
 - `records/compile-manifest.yaml`
 - `records/compile-request.yaml`
@@ -230,77 +208,19 @@ schema v1 只保留给尚未纳入软件状态维护的临时命令；
 和工程判断决定，`compile-tool` 只负责显式展示、绑定和执行，
 不生成 recipe；前述 imx-mkimage `soc.mak` 依赖读取不改变这一边界。
 
-### 先只保留到“编译对象 + 最小依赖集合”这一层
+## 查阅相关项目资料
 
-`compile` 先判断这次属于哪个编译对象，
-以及通常会涉及哪些依赖，
-不在这里直接展开具体构建配方。
+按本次问题读取需要的说明，不要求逐层遍历：
 
-例如：
+- 软件栈身份与跨项目版本组合：server `support_level/software_stacks/<stack>.md`。
+- 编译对象及候选依赖：server `support_level/compile_targets/<target>/README.md`。
+- 项目命令、输入输出与版本要求：server `support_level/code_assets/projects/<project>/USAGE.md`。
+- 协同工作区约束：server `support_level/code_assets/workspaces/<workspace>/README.md`。
+- 板 revision、板级基线与风险：Windows `..\support_level\board_knowledge\README.md` 及其索引，
+  不在 server 查同名目录，也不把历史 Linux 操作当成当前 Windows 命令。
 
-- `flashbin`
-  常见会涉及 `mkimage`、`ATF`、`U-Boot`、`OP-TEE`、`OEI`、`SMFW`、firmware、必要时 `M` 核 payload
-- `linux`
-  常见会涉及 Linux 源码项目、toolchain、必要时板级与打包边界
-- `m_freertos_sdk`
-  常见会涉及 SDK 发布包、`arm-none-eabi` 工具链、必要时再回看 `mcuxsdk` 源码资产
-- `zephyr`
-  常见会涉及 `zephyr-workspace` 工作区、`zephyr-sdk`、必要时回看板级边界
-- `a55_rtos`
-  常见会涉及 `heterogeneous-multicore` 主对象，以及同工作区里的 `zsdk` / `mcuxsdk` 联动输入
-
-这里的目标只是决定：
-
-- 这次属于哪个编译对象
-- 最小依赖集合是什么
-- 哪些只是依赖输入
-- 哪些才是这次真正该进入的对象或项目
-
----
-
-## 决定依赖集合后怎么下沉
-
-一旦编译对象已经确定，`compile` 自己就不继续展开具体做法，
-而是先把任务下沉到对应编译对象说明。
-
-下沉规则：
-
-- 资源位置、目录归属、固定输入位置
-  先回 `support`
-- 跨项目软件栈身份，例如 `RTE`
-  先进入 `support_level/software_stacks/<stack>.md`
-- 编译对象一旦确定
-  先进入 `support_level/compile_targets/<target>/README.md`
-- 某个源码项目随后被纳入本次范围
-  再进入 `support_level/code_assets/projects/<project>/USAGE.md`
-- 某个工作区被纳入本次范围
-  进入 `support_level/code_assets/workspaces/<workspace>/README.md`
-- 具体板 revision、板级基线、板级风险
-  回到 Windows `..\support_level\board_knowledge\README.md`，按本版板型入口和历史参考区区分，
-  不在 server 查找同名目录，也不把历史 Ubuntu 操作当作当前 Windows 命令。
-
-如果目标目录旁边已经有 `RELATION.yaml` 或 `<id>.RELATION.yaml`，
-先读它作为机器索引，再进入 README / USAGE：
-
-- 用 `owner` 确认当前阶段是否仍归 `compile`
-- 用 `relations` 快速列出候选下沉对象
-- 用 `case_required_for` 判断是否必须进入 `work/<case>/`
-- 用 `warnings` 避免把 recipe、软件线、源码项目混成一层
-
-但具体构建命令、版本核对和输入输出契约仍以 README / USAGE 为准。
-
-文档分工要明确：
-
-- 每一层目录下的 `README.md` 是描述文档
-  负责说明这一层里有什么、怎么分布、下一步该往哪一层走
-- 每个源码项目或具体工具旁边的 `USAGE.md` 是操作手册
-  负责这个项目或工具自己怎么用、怎么编、怎么检查
-- 每个编译对象目录下的 `README.md` 负责说明：
-  它依赖什么
-  正常从哪里开始编
-  哪些目录不能直接拿来编
-
-也就是说，目录层看 `README.md`，项目层看 `USAGE.md`。
+已有 `RELATION.yaml` 可帮助定位关联资源、case 要求和 warning；
+具体构建命令及版本契约仍以项目说明、清单和 policy 为准。
 
 ### 共享基线 vs case 构建
 
@@ -317,48 +237,24 @@ schema v1 只保留给尚未纳入软件状态维护的临时命令；
   同工作区里的 `zsdk/`、`mcuxsdk/` 只是联动输入
 - 对 `zephyr`，不要默认从 `hmc-workspace/zsdk/` 开始
 
-也就是说：
+## 待上板产物记录
 
-- `compile` 负责决定要不要动这个编译对象
-- 对象一旦确定，先由该对象 `README.md` 接手
-- 真正落到源码项目时，再由对应项目 `USAGE.md` 接手
-
-不要把“只是为了方便”而把单项目操作手册留在上层。
-
-### 与其他层的边界
-
-- 当前缺的是资源位置、固定输入、共享资产路径
-  回 `support`
-- 当前缺的是烧写、启动、登录、运行态验证
-  回 `board-exec`
-- 当前缺的是板 revision、板级默认形态、板级风险
-  进 Windows 的 `board_knowledge/README.md`，再按索引选匹配板型和 revision
-
----
-
-## compile 与 `handoff`
-
-`compile` 不是状态管理器，
-这里只补一个很小的跨阶段交接动作：
-
-- 当这次编译已经明确要切到 `board-exec`
-- 且已经形成可被板级执行阶段消费的产物集合
-
-则 `compile` 负责在当前 case 下生成或更新 `handoff` 实例。
+任务已明确需要上板，且已形成可用于板级操作的产物集合时，
+在当前 case 下生成或更新 `handoff`。它是产物与消费方式的记录，不表示板子已执行任何动作。
 
 站在当前 `workspace/` 视角，
 默认落点是：
 
 - Windows 主 case：`../support_level/work/<case>/state/handoff.yaml`
 - server 构建现场：ENVIRONMENT 中的同名 case；按需取回工具生成的构建记录和所需产物，
-  由 Windows 上的 compile 写主 case 的 handoff，不直接把远端状态文件中的 Linux 路径当作本地路径。
+  在 Windows 主 case 写 handoff，不直接把远端状态文件中的 Linux 路径当作本地路径。
 
 ### 什么时候需要 `handoff`
 
 需要的场景是：
 
 - 当前任务不止于“本地产物准备”
-- 下一步已经明确要进入 `board-exec`
+- 下一步已经明确要上板
 - 后续上板动作不能只靠对话上下文维持
 
 不需要的场景是：
@@ -367,9 +263,9 @@ schema v1 只保留给尚未纳入软件状态维护的临时命令；
 - 只是确认依赖集合
 - 只是本地编译但还没进入板级执行
 
-### `compile` 对 `handoff` 的 owner 边界
+### 记录范围
 
-`compile` 只负责写自己真正有 authority 的内容：
+按实际产物与构建证据记录：
 
 - 这次作为一个完整部署组合交付的产物是什么
 - 每个产物从哪来、放在哪、大小和 hash 是什么
@@ -379,13 +275,13 @@ schema v1 只保留给尚未纳入软件状态维护的临时命令；
 - 上板前提里，哪些是编译阶段已经明确知道的
 - 上板后优先验证什么
 
-`compile` 不负责写：
+不能仅凭产物准备情况填写：
 
 - 板当前实际运行到哪一步
 - 板当前允许做什么动作
 - 板已经成功进入下一阶段
 
-### `compile` 持有的最小 `handoff` 模板
+### 最小 `handoff` 模板
 
 第一阶段不追求重 schema，
 但最小模板至少要能表达：
@@ -409,7 +305,7 @@ artifacts:
 ```
 
 示例路径、大小和 hash 都必须替换为本次事实。SCP 后分别核对两端实际字节数和 SHA-256；
-只有大小及 hash 一致才可交给 board-exec。尚未取回、校验失败或字段仍是占位值时，
+只有大小及 hash 一致才可用于板级动作。尚未取回、校验失败或字段仍是占位值时，
 明确记录为待完成，不能称为可上板产物。Windows 工具只消费 `windows_path`，
 `server_path` 只用于来源和传输，不改写工具生成的 `software-state`。
 仅作为 `embedded_in` 来源记录、不会单独写入的组件无需为了补字段而下载，
@@ -421,21 +317,3 @@ artifacts:
 
 默认不再单独创建重复的 `deployment.yaml`；
 部署组合仍由现有 `state/handoff.yaml` 表达。
-
----
-
-## compile 自己最终产出什么
-
-`compile` 最终只应该产出这些高层判断结果：
-
-- 目标运行链路
-- 当前所属编译对象
-- 最小依赖清单
-- 本次会进入哪个编译对象 `README.md`
-- 本次后续会进入哪些项目 `USAGE.md`
-- 哪些输入仍需用户或 `support` 提供
-- 哪些步骤后续要切到 `board-exec`
-- 如果已经明确要切到 `board-exec`，当前 `handoff` 应该怎样生成或更新
-
-如果这些高层结论还没稳定，
-说明还不该进入具体项目操作手册。

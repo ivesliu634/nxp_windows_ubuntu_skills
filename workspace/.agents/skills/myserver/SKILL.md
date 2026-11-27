@@ -21,7 +21,6 @@ description: "从 Windows 通过已有 SSH 别名 myserver 操作 Ubuntu server�
 - Windows 资料包根的 `server/support_level` 是这些工具和构建规则的部署源，部署方式见
   [server/README.md](../../../../server/README.md)。它不代表本机有业务源码，也不用于 Windows 构建。
   更新前比较远端改动，只部署所需文件，不整树覆盖或删除远端源码、资源和 case。
-- `support` 定位资源；构建对象和依赖交给 `compile`；本技能只处理远端执行与传输。
 - Windows case 是主目录；server 同名 case 是源码和构建现场。
 
 ## PowerShell 中执行
