@@ -8,7 +8,6 @@
 | imx-rm | `imx-rm\imx_rm.py` | [USAGE](imx-rm/USAGE.md) |
 | cfimager | `cfimager.exe` | 仅用户明确要求且确认目标盘后使用，先查程序帮助 |
 
-BCU 与串口工具保留 Vero 原实现和 profile，整体迁入本目录。
 Windows 不使用 Linux sudo、udev、sysfs 或 `/dev/ttyUSB*` 操作硬件。
 具体参数以本目录中的 Windows 工具说明及帮助为准。
 

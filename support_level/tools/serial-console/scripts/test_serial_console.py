@@ -67,6 +67,99 @@ class SerialConsoleTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "ambiguous"):
             console.resolve_device({"ports": {"linux": {"interface": "if00"}}}, "linux", None, group=group)
 
+    def test_doctor_unresolved_interfaces_do_not_imply_blank_eeprom(self):
+        for vid, pid in ((0x0403, 0x6011), (0x1A86, 0x55E8)):
+            with self.subTest(vid=vid, pid=pid):
+                groups = self.groups([
+                    port(100 + index, "shared", vid=vid, pid=pid)
+                    for index in range(2)
+                ])
+                args = console.build_parser().parse_args(["doctor"])
+                output, errors = io.StringIO(), io.StringIO()
+                with mock.patch.object(console, "discover_adapter_groups", return_value=groups), \
+                     mock.patch.object(console.subprocess, "run", side_effect=AssertionError("unexpected BCU access")), \
+                     contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    self.assertEqual(console.cmd_doctor(args), 1)
+                text = output.getvalue() + errors.getvalue()
+                self.assertIn("do not infer COM roles or EEPROM contents", text)
+                self.assertIn("--device COMn", text)
+                self.assertNotIn("bcu eeprom -w", text)
+                self.assertNotIn("blank FTDI EEPROM", text)
+
+    def test_doctor_registry_mapping_is_usable_without_writing_eeprom(self):
+        ports = [port(100 + index, "5") for index in range(4)]
+        registry = {item.device: ("adapter-location", index) for index, item in enumerate(ports)}
+        groups = self.groups(ports, registry)
+        for board in (None, "imx8mpevk"):
+            with self.subTest(board=board):
+                arguments = ["doctor"] + (["--board", board] if board else [])
+                args = console.build_parser().parse_args(arguments)
+                output, errors = io.StringIO(), io.StringIO()
+                with mock.patch.object(console, "discover_adapter_groups", return_value=groups), \
+                     mock.patch.object(console.subprocess, "run", side_effect=AssertionError("unexpected BCU access")), \
+                     contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    self.assertEqual(console.cmd_doctor(args), 2)
+                text = output.getvalue() + errors.getvalue()
+                self.assertIn("usable on this host", text)
+                self.assertNotIn("has no serial number", text)
+                self.assertNotIn("bcu eeprom -w", text)
+                self.assertNotIn("writing the FTDI EEPROM is recommended", text)
+
+    def test_doctor_eeprom_readback_stays_separate_from_interface_identity(self):
+        groups = self.groups([port(100, "5"), port(101, "5")])
+        args = console.build_parser().parse_args([
+            "doctor", "--board", "imx93evk14", "--verify-eeprom", "bcu.exe",
+        ])
+        cases = (
+            ("board model is imx93evk14\ndone", 0, "unknown"),
+            ("empty response", 0, "unknown"),
+            ("Can't auto recognize the board", 0, "unknown"),
+            ("default values to FTDI EEPROM successfully", 0, "unknown"),
+            ("Invalid EEPROM context", 0, "blank"),
+            ("FTDI EEPROM SN: E10092", 0, "written"),
+            ("FTDI EEPROM SN: E10092", 1, None),
+        )
+        for raw, returncode, state in cases:
+            with self.subTest(raw=raw, returncode=returncode):
+                output, errors = io.StringIO(), io.StringIO()
+                completed = SimpleNamespace(stdout=raw, stderr="", returncode=returncode)
+                with mock.patch.object(console, "discover_adapter_groups", return_value=groups), \
+                     mock.patch.object(console.subprocess, "run", return_value=completed) as read, \
+                     contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    self.assertEqual(console.cmd_doctor(args), 1)
+                self.assertEqual(
+                    read.call_args.args[0],
+                    ["bcu.exe", "eeprom", "-r", "-board=imx93evk14"],
+                )
+                text = output.getvalue() + errors.getvalue()
+                if state is None:
+                    self.assertIn("bcu exited with code 1", text)
+                    self.assertIn("EEPROM state is unknown", text)
+                    self.assertNotIn("bcu eeprom state = written", text)
+                else:
+                    self.assertIn(f"bcu eeprom state = {state}", text)
+                self.assertIn("identity blank", text)
+                self.assertNotIn("bcu eeprom -w", text)
+                self.assertNotIn("identity is not written", text)
+
+    def test_doctor_eeprom_verification_requires_one_ftdi_adapter(self):
+        cases = (
+            [port(100 + index, "shared", vid=0x1A86, pid=0x55E8) for index in range(2)],
+            [port(100, "first"), port(101, "second")],
+        )
+        for ports in cases:
+            with self.subTest(ports=ports):
+                groups = self.groups(ports)
+                args = console.build_parser().parse_args([
+                    "doctor", "--board", "imx93evk14", "--verify-eeprom", "bcu.exe",
+                ])
+                output, errors = io.StringIO(), io.StringIO()
+                with mock.patch.object(console, "discover_adapter_groups", return_value=groups), \
+                     mock.patch.object(console.subprocess, "run", side_effect=AssertionError("unexpected BCU access")), \
+                     contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    self.assertEqual(console.cmd_doctor(args), 1)
+                self.assertIn("BCU read not attempted", errors.getvalue())
+
     def test_raw_capture_does_not_require_board_or_discovery(self):
         args = console.build_parser().parse_args(["capture", "--device", "COM12"])
         result = {"role": "explicit-device", "state": "done", "bytes": 0, "reconnects": 0, "status": 0}

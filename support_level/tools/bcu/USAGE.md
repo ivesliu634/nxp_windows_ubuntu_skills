@@ -2,7 +2,7 @@
 
 本工具内 `bin/bcu.exe` 是用户提供的 `bcu_1.1.128-0-ge7027dc`。调用前把路径展开成绝对路径，PowerShell 用 `&` 调用 EXE。
 板子通过 Windows 的 FTDI 调试口连接；烧写 USB 口可能是另一个接口。
-本说明保留原 Vero 的 Windows 方法；写 EEPROM、复位和切模式需要在用户授权范围内执行，
+写 EEPROM、复位和切模式需要在用户授权范围内执行，
 身份体检异常本身不构成写 EEPROM 的授权。
 
 ## 先识别，再操作
@@ -22,26 +22,22 @@ $bcuExe = (Resolve-Path '..\support_level\tools\bcu\bin\bcu.exe').Path
 
 - `eeprom -r -board=<model>` 输出里的 `board model is <model>` **只是回显你在 `-board=` 里传入的名字，不是从板上读出来的**，不能当作身份已核对。实测传一个明显不符的板型也会照样回显该名字。
 - 真正判断 FTDI EEPROM 是否已写，看这行后面的内容：空片会打印 `Registered FTDI EEPROM on board` + `Invalid EEPROM context, use -w option to write the default values.`；已写的板会打印真实的 `FTDI EEPROM SN / Board Info / SoC Info`。
-- `-auto` 才是真识别：空片会对所有板型逐一报 `Invalid EEPROM context`，最后 `Can't auto recognize the board`；只有已写身份的板 `-auto` 才能认出来。
-- 还有一种更省事的空片输出（实测 imx8mpevk）：`eeprom -r -board=<model>` 只打印 `board model is <model>` + `done`，连 `Invalid EEPROM context` 都没有。这时 bcu 什么都没回读到，无法据此判断空/已写；以适配器身份体检为准（串口侧裸序列号 `5`、四口无 A/B/C/D 尾字母即身份未写）。
-- 因此空片无法靠 bcu 读回板型，必须靠丝印 / RM / 原理图确认型号，再 `-w` 写入。
-- 串口工具 `serial_console.py doctor --board <model> --verify-eeprom <bcu路径>` 已把上述判读固化：它跑 `eeprom -r`，用 `classify_bcu_eeprom_output` 越过回显看真实状态，回读不到内容时明确提示以适配器体检为准。
-- 写入空操作还有第三种可能：**FTDI 桥的串行 EEPROM 根本没贴片（DNP）**，此时 `-w` 报成功却永远写不进去，拔插多少次都没用。用原理图核对工具一条命令定论（见下）。
+- `-auto` 用于读取已有身份，而不是回显指定板名。它可能逐一报 `Invalid EEPROM context`，最后 `Can't auto recognize the board`；识别失败本身不能证明 EEPROM 空白。
+- 另一种历史输出（实测 imx8mpevk）是 `eeprom -r -board=<model>` 只打印 `board model is <model>` + `done`，连 `Invalid EEPROM context` 都没有。这时没有回读到有效上下文，EEPROM 状态必须保留为未知；裸序列号、缺少 A/B/C/D 尾字母只能用于接口身份判断，不能补证 EEPROM 内容。
+- 无法读回身份时，先靠丝印 / RM / 原理图确认型号；这不意味着下一步必须写入。
+- 串口工具 `serial_console.py doctor --board <model> --verify-eeprom <bcu路径>` 在只有一个 FT4232H 适配器时执行只读 `eeprom -r`，越过板名回显判断上下文。回读失败或内容不足时报告未知；无效上下文也不能证明芯片已贴片或可写。
+- **FTDI 桥的串行 EEPROM 可能根本没贴片（DNP）**，此时 `-w` 报成功也不能证明身份已持久化。是否贴片应结合对应版本原理图、BOM 或实物核对，不能用反复写入来探测。
 
 ## 判断 EEPROM 是"空白"还是"根本没贴片"
 
-`eeprom -w` 空操作有两种根因，处理相反：白片（有芯片、可写）vs DNP（没芯片、永远写不进）。
-证据分三层，**优先用不依赖原理图、可移植到任意板载 FTDI 桥板卡（含客户板）的行为判据**；
-原理图只是当你想在上板/拔插前先离线确认时的可选佐证：
+接口身份、EEPROM 回读和器件是否贴片是三类不同证据：
 
-1. 主判据（行为体检，板无关，不需原理图）：`serial_console.py doctor`。裸序列号、四口无
-   A/B/C/D 尾字母、都塌到 if00 => 身份没写。这套判据对任何用板载 FTDI 桥的板都成立。
-2. 行为闭环（区分白片 vs DNP，仍不需原理图）：`eeprom -w` 后拔插再体检。序列号变了、四口出现
-   A/B/C/D => 是白片、写成功；反复写+拔插后永远裸序列号、且 bcu 从不打印
-   `Registered FTDI EEPROM on board` => 极可能没芯片（DNP）。这是判"能不能写"的可移植闭环。
-3. 可选离线佐证（**需要原理图，客户不一定提供**）：`scripts/schematic_eeprom_check.py`。
-   有原理图时它把"手翻 PDF 找 EECS/EECLK/EEDATA 看有无 EEPROM 型号"固化成一条命令；没有
-   原理图就跳过这层，直接用上面 1/2 定论。
+1. `serial_console.py doctor` 只判断接口能否区分。`blank` 表示身份不明，
+   `degraded` 表示注册表恢复的映射当前可用；两者都不能证明 EEPROM 空白、DNP 或可写。
+2. 只读 `eeprom -r` 可提供上下文证据。只有回显、自动识别失败或写入后身份不变，
+   都不足以单独判定 DNP；缺少硬件证据时明确保留未知，不通过重复写入补证。
+3. 对应版本的原理图、BOM 和实物用于核对器件是否贴片。`scripts/schematic_eeprom_check.py`
+   可定位原理图中的候选页和证据行，结果仍需结合板卡版本人工复核。
 
 有原理图时的可选佐证命令：
 
@@ -62,30 +58,34 @@ python ..\support_level\tools\bcu\scripts\schematic_eeprom_check.py --pdf '<sche
 多板通过 `lsftdi` 和工具帮助选实际设备 `-id=`。注意板上通常有两颗不同的 EEPROM：bcu `eeprom -r/-w` 操作的是 **FT4232H 桥的 USB 配置 EEPROM**（决定串口序列号/接口区分），与 U-Boot 读的**板载 I2C board-ID EEPROM** 是不同器件；bcu 这里不读后者。
 
 
-## 空 EEPROM 板卡：先写身份，再拔插（串口接入的通用前置）
+## 已确认可写且获授权时：初始化 FTDI 身份
 
-这是所有用板载 FTDI 桥的 EVK 的通用步骤，不是某块板的特例。串口技能的
-`doctor` 报 blank/degraded、或"读不到串口/四口塌到 if00"时，都走这里。
+本节不是串口接入的通用前置。只有独立确认 FTDI 桥、准确板型、EEPROM 已贴片且可写，
+确实需要初始化，并获得本次写入授权后才执行。DNP 和 CH9114 不适用；
+`doctor` 的 `blank/degraded`、串口静默或缺少接口尾字母都不能代替这些前提。
 
-新板 / 白片 EVK 的板载 FT4232H EEPROM 可能是空的。表现（实测 imx8mpevk）：
+FT4232H 身份异常的历史输出包括：
 `eeprom -r -board=<任意名>` 会先回显 `board model is <任意名>`（仅回显参数，见上），
 随后报 `Registered FTDI EEPROM on board` + `Invalid EEPROM context, use -w option
 to write the default values.`；`eeprom -r -auto` 遍历所有板型全部 `Invalid EEPROM
 context` 并 `Can't auto recognize the board`；`get_boot_mode` 报 `remote_en is
 disabled`；串口侧 pyserial 只读到裸序列号（如 `5`）、四个口塌到 if00 无法区分角色。
-注意"能显示板型"是假象，那是命令行参数回显，不代表读到了身份。
+这些输出不单独证明 EEPROM 空白或可写。"能显示板型"可能只是命令行参数回显，
+不代表读到了身份。
 
 
 
-确认板型后（`lsboard` 里的确切名字），一次性写入默认身份：
+满足上述前提后，使用已确认板型（`lsboard` 里的确切名字）一次性写入默认身份：
 
 ```powershell
 & $bcuExe eeprom -w -board=<实际model>   # 例 imx93evk14
 ```
 
-写成功会打印 `... default values to FTDI EEPROM successfully` 和
-`FTDI EEPROM SN / Board Info / SoC Info`。**写完必须拔插一次调试 USB 线**（或在设备
-管理器禁用/启用），Windows 才会用新序列号重新枚举；这时四个口才带 A/B/C/D 尾字母，
+命令可能打印 `... default values to FTDI EEPROM successfully` 和
+`FTDI EEPROM SN / Board Info / SoC Info`；返回成功本身不证明身份已持久化。
+**写完必须拔插一次调试 USB 线**（或在设备管理器禁用/启用），再回读和体检确认实际身份，
+不能仅凭原命令输出宣布写入成功。
+Windows 重新枚举后，预期四个口带 A/B/C/D 尾字母，
 串口工具原生就能区分 if00-if03。实测 imx93evk14：写入后 SN 变为 `E10092`，四口
 `E10092A..D -> if00..if03`。写 EEPROM 需要独占 FTDI，先关掉占用串口的捕获/终端再执行。
 `eeprom -w` 只写工具内置默认身份，不动 boot fuse。
@@ -112,4 +112,4 @@ i.MX943 B1 历史板的 reset 示例为 `reset sd -board=imx943evk19b1`；USB �
 - `reset` 默认结束会 deinit。用过 `init`、`set_boot_mode` 或 `-keep` 时，工作结束执行 `deinit -board=<model>`，再用 `get_boot_mode` 确认控制权交还拨码开关。
 - 具体板控前提和拨码要求看 profile；历史 B1 的 SW7-1 为 OFF，不能套到 A0 板卡。
 
-首次迁移可执行本目录 `selfcheck.cmd`，仅检查工具能运行。板上日志与运行情况仍需现场确认。
+首次使用可执行本目录 `selfcheck.cmd`，仅检查工具能运行。板上日志与运行情况仍需现场确认。

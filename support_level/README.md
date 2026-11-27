@@ -19,7 +19,4 @@ Windows 本支撑层不保留 `code_assets` 或第二套模块说明；
 查源码、项目说明和版本必须 SSH 到 server，不为了补齐本地目录而下载源码或重资源。
 远端工具和规则的小文件部署源见 [server](../server/README.md)，不与本地板级资源混用。
 
-`board_knowledge` 从旧 `board_notes` 迁入，原资料内容保留。
-BCU 与串口工具从 `.verorules` 迁至 `tools`。
-原八个历史任务已按用户要求删除，旧根目录的第二个 `work/` 入口已移除。
 新 case 只使用本支撑层的 `work/`。

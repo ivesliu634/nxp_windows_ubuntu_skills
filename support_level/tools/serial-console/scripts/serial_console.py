@@ -417,15 +417,7 @@ def discover_adapter_groups() -> list[dict[str, Any]]:
 
 # ---------------------------------------------------------------------------
 # Board-agnostic adapter identity health
-#
-# A multi-interface FTDI adapter (for example an FT4232H) can only be split
-# into stable per-interface COM roles when its EEPROM stores a serial number,
-# because the per-interface identity is the trailing letter of that serial
-# (A -> if00, B -> if01, ...). A board whose FTDI EEPROM was never programmed
-# reports a bare serial with no trailing letter on every interface, so the
-# interfaces are ambiguous. This is not specific to any board; the same check
-# and the same remediation (write the EEPROM by board name, then replug)
-# apply to every board that uses an on-board FTDI bridge.
+# Interface identity alone does not establish EEPROM contents or writability.
 # ---------------------------------------------------------------------------
 def adapter_identity_health(group: dict[str, Any]) -> dict[str, Any]:
     """Classify how usable an adapter's per-interface identity is.
@@ -434,14 +426,10 @@ def adapter_identity_health(group: dict[str, Any]) -> dict[str, Any]:
       status  - one of "ok", "degraded", "blank".
                 ok       every interface has a stable identity (FTDI trailing
                          letter, or the adapter has a single interface).
-                degraded multiple interfaces but none carries a serial letter;
-                         the EEPROM has no serial number and the interface
-                         order was only recovered from the Windows registry
-                         fallback. Usable now, but the identity is not stored
-                         on the board and will not survive on another host.
-                blank    multiple interfaces collapsed onto if00 because there
-                         is no serial letter and the registry fallback was
-                         unavailable; the tool cannot tell them apart.
+                degraded interface order was recovered from the Windows
+                         registry fallback. Usable on this host.
+                blank    interface identities cannot be distinguished. This
+                         legacy status name is not an EEPROM diagnosis.
       summary - short human-readable explanation.
       serial  - the base serial reported by the adapter (may be a bare number).
     """
@@ -479,59 +467,19 @@ def adapter_identity_health(group: dict[str, Any]) -> dict[str, Any]:
         return {
             "status": "blank",
             "summary": (
-                f"{len(interfaces)} interfaces collapsed onto if00; FTDI EEPROM "
-                "has no serial number and the interfaces cannot be told apart"
+                f"{len(interfaces)} interfaces share an interface identity; "
+                "EEPROM contents cannot be inferred"
             ),
             "serial": serial,
         }
     return {
         "status": "degraded",
         "summary": (
-            "FTDI EEPROM has no serial number; interface order recovered from "
-            "the Windows registry fallback only"
+            "interface order recovered from the Windows registry fallback; "
+            "EEPROM contents cannot be inferred"
         ),
         "serial": serial,
     }
-
-
-def board_eeprom_is_dnp(board: str | None) -> bool:
-    """True if the board profile marks the FTDI bridge EEPROM as DNP (no-fit).
-
-    Such boards (e.g. imx8mpevk) can never persist an FTDI identity, so the
-    "bcu eeprom -w then replug" remediation does not apply to them. The flag is
-    read from the profile (adapter.eeprom_dnp) so this stays board-agnostic.
-    """
-    if not board:
-        return False
-    try:
-        profile = load_profile(board)
-    except SystemExit:
-        return False
-    except Exception:
-        return False
-    adapter = profile.get("adapter") or {}
-    return bool(adapter.get("eeprom_dnp"))
-
-
-def eeprom_write_hint(board: str | None) -> str:
-    """Return the remediation for a blank/degraded FTDI EEPROM adapter.
-
-    For a normal board the fix is to write the EEPROM and replug. For a board
-    whose EEPROM is DNP (not populated), writing is physically impossible, so
-    we tell the user the degraded state is expected and to use the ports as-is
-    via the Windows registry fallback instead of chasing an EEPROM write."""
-    name = board or "<board-model>"
-    if board_eeprom_is_dnp(board):
-        return (
-            f"{name} has a DNP (unpopulated) FTDI EEPROM, so 'bcu eeprom -w' can "
-            "never persist an identity here; the degraded state is expected. Use "
-            "the four ports as-is: the tool maps if00-if03 via the Windows "
-            "registry fallback (identify the console by capturing each port)."
-        )
-    return (
-        f"bcu eeprom -w -board={name}  then REPLUG the debug USB cable so "
-        "Windows re-enumerates the adapter with a real serial number"
-    )
 
 
 def classify_bcu_eeprom_output(text: str) -> dict[str, Any]:
@@ -543,7 +491,8 @@ def classify_bcu_eeprom_output(text: str) -> dict[str, Any]:
     treated as a confirmed identity. This helper looks past that echo at the
     lines that actually reflect the FTDI EEPROM state and returns:
 
-      state       - "blank"   FTDI EEPROM has no valid context (needs -w),
+      state       - "blank"   BCU reported an invalid EEPROM context; chip
+                             presence and writability remain unproven,
                     "written" a real identity was read back,
                     "unknown" output did not match either pattern.
       echoed_board- the model echoed from -board=, kept only so callers can
@@ -560,21 +509,18 @@ def classify_bcu_eeprom_output(text: str) -> dict[str, Any]:
     lowered = text.lower()
     blank_markers = (
         "invalid eeprom context",
-        "can't auto recognize the board",
-        "empty",
     )
     written_markers = (
         "ftdi eeprom sn",
-        "default values to ftdi eeprom successfully",
     )
     if any(marker in lowered for marker in blank_markers):
         return {
             "state": "blank",
             "echoed_board": echoed,
             "detail": (
-                "FTDI EEPROM has no valid context (Invalid EEPROM context / "
-                "auto-recognize failed); the 'board model is ...' line is only "
-                "an echo of -board= and does not confirm identity"
+                "BCU reported an invalid EEPROM context; this does not prove "
+                "chip presence or writability, and the echoed board model "
+                "does not confirm identity"
             ),
         }
     if any(marker in lowered for marker in written_markers):
@@ -601,7 +547,7 @@ def verify_eeprom_with_bcu(bcu: str, board: str) -> dict[str, Any]:
 
     Returns the classify_bcu_eeprom_output dict plus keys:
       ran   - True if bcu executed (even if it returned non-zero).
-      error - populated when bcu could not be launched.
+      error - populated when bcu could not complete the read successfully.
       raw   - the combined stdout/stderr text, for logging.
     """
     try:
@@ -625,10 +571,14 @@ def verify_eeprom_with_bcu(bcu: str, board: str) -> dict[str, Any]:
     result["ran"] = True
     result["error"] = ""
     result["raw"] = raw
+    if completed.returncode != 0:
+        result["state"] = "unknown"
+        result["error"] = f"bcu exited with code {completed.returncode}"
+        result["detail"] = "BCU read failed; EEPROM state is unknown"
     return result
 
 
-def report_adapter_health(groups: list[dict[str, Any]], board: str | None) -> str:
+def report_adapter_health(groups: list[dict[str, Any]]) -> str:
     """Print an identity-health line for each adapter and return the worst status.
 
     This is the shared entry point used by list, probe and doctor so every
@@ -647,7 +597,17 @@ def report_adapter_health(groups: list[dict[str, Any]], board: str | None) -> st
             f"adapter [{index}] id={health['serial']}: identity {status} "
             f"- {health['summary']}"
         )
-        print(f"  remediation: {eeprom_write_hint(board)}")
+        if status == "degraded":
+            print(
+                "  remediation: interface mapping is usable on this host; "
+                "this result does not require an EEPROM write"
+            )
+        else:
+            print(
+                "  remediation: inspect USB/driver enumeration or capture only "
+                "an independently identified --device COMn; do not infer "
+                "EEPROM contents or write defaults from this result"
+            )
     return worst
 
 
@@ -1086,7 +1046,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
     print("serial adapters:")
     print_adapter_groups(groups)
-    report_adapter_health(groups, args.board)
+    report_adapter_health(groups)
 
     if profile:
         print(f"board: {args.board}")
@@ -1113,7 +1073,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 def cmd_probe(args: argparse.Namespace) -> int:
     groups = discover_adapter_groups()
     print_adapter_groups(groups)
-    report_adapter_health(groups, args.board)
+    report_adapter_health(groups)
     profile = load_profile(args.board) if args.board else None
 
     if not profile:
@@ -1673,86 +1633,63 @@ def cmd_recover(args: argparse.Namespace) -> int:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    # Board-agnostic health gate: run this before any capture/send flow to
-    # confirm every detected adapter can be split into stable per-interface
-    # roles. If an adapter's FTDI EEPROM has no serial number, this prints the
-    # exact bcu remediation and returns non-zero so an operator (or a wrapper
-    # script) knows the identity must be written before continuing. This is the
-    # same check list and probe surface, exposed as a dedicated command so the
-    # "write EEPROM first" flow is a first-class, board-independent step.
     groups = discover_adapter_groups()
     print_adapter_groups(groups)
     if not groups:
         print("doctor: no USB serial adapter detected", file=sys.stderr)
         return 1
-    worst = report_adapter_health(groups, args.board)
-    # Optional real-hardware confirmation: when an adapter looks blank/degraded
-    # and the operator points --verify-eeprom at bcu.exe with a --board name,
-    # actually read the FTDI EEPROM and classify the true state. This looks
-    # past the "board model is <name>" echo (which only repeats the -board=
-    # argument) at the EEPROM-context lines, so a blank chip is not mistaken
-    # for a written one just because bcu echoed a model name.
+    worst = report_adapter_health(groups)
     if getattr(args, "verify_eeprom", None) and worst != "ok":
         if not args.board:
             print(
                 "doctor: --verify-eeprom needs --board=<model> to pass to bcu",
                 file=sys.stderr,
             )
-        else:
-            verdict = verify_eeprom_with_bcu(args.verify_eeprom, args.board)
-            if not verdict["ran"]:
-                print(
-                    f"doctor: could not run bcu ({verdict['error']})",
-                    file=sys.stderr,
-                )
-            else:
-                echoed = verdict.get("echoed_board")
-                if echoed:
-                    print(
-                        f"doctor: note 'board model is {echoed}' is only an echo "
-                        f"of -board={args.board}, not a confirmed identity"
-                    )
-                print(f"doctor: bcu eeprom state = {verdict['state']} ({verdict['detail']})")
-                if verdict["state"] == "unknown":
-                    # Some boards/console modes print only the echoed model and
-                    # "done" without any EEPROM-context line, so bcu cannot
-                    # confirm blank vs written. The adapter-side identity health
-                    # (bare serial, no A/B/C/D letter) is then the ground truth.
-                    print(
-                        "doctor: bcu did not read back any EEPROM context; trust "
-                        "the adapter identity health above (a bare serial with "
-                        "no A/B/C/D letter means the identity is not written)"
-                    )
+            return 1
+        if len(groups) != 1 or groups[0].get("usb_id") != "0403:6011":
+            print(
+                "doctor: --verify-eeprom requires exactly one FTDI FT4232H "
+                "adapter; BCU read not attempted",
+                file=sys.stderr,
+            )
+            return 1
+        verdict = verify_eeprom_with_bcu(args.verify_eeprom, args.board)
+        if not verdict["ran"] or verdict["error"]:
+            print(
+                f"doctor: EEPROM verification failed ({verdict['error']}); "
+                "EEPROM state is unknown",
+                file=sys.stderr,
+            )
+            return 1
+        echoed = verdict.get("echoed_board")
+        if echoed:
+            print(
+                f"doctor: note 'board model is {echoed}' is only an echo "
+                f"of -board={args.board}, not a confirmed identity"
+            )
+        print(f"doctor: bcu eeprom state = {verdict['state']} ({verdict['detail']})")
+        if verdict["state"] == "unknown":
+            print(
+                "doctor: BCU did not establish the EEPROM state; "
+                "interface identity cannot resolve that uncertainty"
+            )
     if worst == "ok":
         print("doctor: all adapters expose a stable per-interface identity")
         return 0
     if worst == "blank":
         print(
-            "doctor: at least one adapter has a blank FTDI EEPROM and its "
-            "interfaces cannot be told apart; write the identity and replug "
-            "before capturing",
+            "doctor: at least one adapter has unresolved interface identities; "
+            "do not guess roles. Capture only an independently identified "
+            "--device COMn or resolve USB/driver enumeration first",
             file=sys.stderr,
         )
         return 1
-    # degraded: usable now via the registry fallback. Whether writing the
-    # EEPROM helps is board-specific: if the FTDI EEPROM is DNP (not populated)
-    # the write can never persist, so the degraded state is expected and
-    # permanent - do not recommend a futile write in that case.
-    if board_eeprom_is_dnp(args.board):
-        print(
-            "doctor: adapter identity recovered from the Windows registry "
-            "fallback only; this board has a DNP (unpopulated) FTDI EEPROM, so "
-            "the identity can never be stored on-board and this degraded state "
-            "is expected - use the registry-fallback ports as-is",
-            file=sys.stderr,
-        )
-    else:
-        print(
-            "doctor: adapter identity recovered from the Windows registry "
-            "fallback only; writing the FTDI EEPROM is recommended so the identity "
-            "is stored on the board",
-            file=sys.stderr,
-        )
+    print(
+        "doctor: adapter identity recovered from the Windows registry fallback; "
+        "the interface mapping is usable on this host. This result alone does "
+        "not justify an EEPROM write",
+        file=sys.stderr,
+    )
     return 2
 
 
@@ -1787,16 +1724,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = sub.add_parser(
         "doctor",
-        help="board-agnostic identity health check; flags blank FTDI EEPROMs",
+        help="check interface identity without inferring EEPROM contents",
     )
-    p_doctor.add_argument("--board", help="optional board id used in the remediation hint")
+    p_doctor.add_argument("--board", help="board model for an optional BCU EEPROM read")
     p_doctor.add_argument(
         "--verify-eeprom",
         metavar="BCU",
         help=(
             "path to bcu(.exe); when an adapter looks blank/degraded, run "
-            "'bcu eeprom -r -board=<board>' and classify the real EEPROM state "
-            "instead of trusting the 'board model is ...' echo (needs --board)"
+            "'bcu eeprom -r -board=<board>' on a single FT4232H adapter; "
+            "report readback evidence without authorizing writes (needs --board)"
         ),
     )
     p_doctor.set_defaults(func=cmd_doctor)

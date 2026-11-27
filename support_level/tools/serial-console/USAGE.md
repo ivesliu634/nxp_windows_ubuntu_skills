@@ -2,7 +2,7 @@
 
 工具为本目录 `scripts/serial_console.py`；依赖见 `requirements.txt`。调用时展开绝对路径。
 配置在 `scripts/profiles/<board>/serial.yaml` 与 README；只读本次相关板型。
-本说明保留原 Vero 的 Windows 方法；写 EEPROM、复位和驱动调整需另有相应授权，
+写 EEPROM、复位和驱动调整需另有相应授权，
 不要把体检提示当成自动执行整改的许可。
 
 ## 独立动作（PowerShell）
@@ -24,14 +24,21 @@ python $serialScript probe --board imx943evk19b1
 通常先 `list` 查看 COM 和适配器，再按已知板型 `probe` 确认角色。身份异常时可用 `doctor` 辅助定位：
 
 ```powershell
-python $serialScript doctor --board <profile-id>   # --board 可省，仅用于整改提示里的板名
+python $serialScript doctor --board <profile-id>   # --board 可省，仅在可选 BCU 回读时使用
 ```
 
 `doctor` 对每个适配器判定身份健康度，退出码即结论：
 
-- `0` ok：每个接口都有稳定身份（FTDI 尾字母 A/B/C/D，或单口适配器），可直接 list/probe/capture。
-- `1` blank：接口身份未能区分，禁止按 role 猜口。可用明确的 `--device COMn` 抓原始日志；此结果本身不能证明 EEPROM 空白或要求写入。
+- `0` ok：每个接口都有稳定身份（FTDI 尾字母 A/B/C/D、CH9114 固定 USB location，或单口适配器），可直接 list/probe/capture。
+- `1` blank 或诊断失败：接口身份未能区分时，禁止按 role 猜口。可用独立确认的 `--device COMn` 抓原始日志；此结果本身不能证明 EEPROM 空白或要求写入。未发现适配器、BCU 回读失败或回读目标不明确也返回 1。
 - `2` degraded：工具通过 Windows 注册表恢复了顺序，当前可按该映射使用；这不是自动写 EEPROM 的理由。
+
+`doctor`、`list` 和 `probe` 的身份提示都不推断 EEPROM 内容，也不建议直接写默认值。
+显式指定 `--verify-eeprom <bcu绝对路径>` 时，必须同时指定 `--board <已确认model>`，
+且当前只能有一个 FT4232H 适配器；非 FTDI 桥或多适配器连接时拒绝调用 BCU。
+BCU 只做 `eeprom -r`：未读回上下文时保留 `unknown`，不改用串口序列号断言 EEPROM 空白。
+读回身份或无效上下文也不改变接口是否可区分的结论；无效上下文不能证明芯片已贴片或可写，
+更不构成写入授权。
 
 只有独立确认 EEPROM 可写、确实需要初始化且获授权后，才考虑以下动作；DNP EEPROM 和 CH9114 不适用：
 
