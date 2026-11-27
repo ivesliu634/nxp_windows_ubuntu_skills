@@ -40,6 +40,8 @@ ssh myserver 'cd /absolute/server/project && git status --short && git describe 
 
 修改前确认已有改动和版本，不覆盖用户改动。共享基线需要修改或构建时，
 在 server 的任务现场准备副本。纯阅读不要求先建 case 或连接板子。
+源码根为符号链接时，先核对目标，或使用 `find -H` 跟随命令行指定的根；
+不能因查找未跟随链接而断言源码不存在。
 
 复杂 shell 命令不要依赖 PowerShell 向本机原生程序传递嵌套引号。
 可以用 UTF-8 Base64 传递脚本，交给远端 bash 解析：
@@ -74,6 +76,8 @@ scp 'C:\actual-root\support_level\work\case\records\input.yaml' 'myserver:/absol
 - 源路径与本地落地路径的对应关系记在当前 case；不混用两端同名文件。
 - 镜像取回后分别执行远端 `sha256sum` 与本地 `Get-FileHash -Algorithm SHA256`。
 - Linux 基线上的补丁应用检查在 server 完成；Windows 保存补丁和检查结果。
+- 导出补丁时核对交付文件集合：`git diff --binary HEAD` 不包含未跟踪新文件；
+  新文件需单独交付，或经用户同意加入 Git 后再导出。
 
 ## 登录失败
 
